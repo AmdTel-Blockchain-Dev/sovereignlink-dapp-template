@@ -1,0 +1,28 @@
+@import "open-props/style";
+
+/* ─── Project-specific custom properties ─────────────────────────────────── */
+
+:root {
+  --color-brand: var(--blue-6);
+  --color-surface: var(--gray-0);
+  --color-text: var(--gray-9);
+  --radius-card: var(--radius-3);
+  --font-base: var(--font-sans);
+}
+
+/* ─── Base reset / globals ────────────────────────────────────────────────── */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+}
+
+body {
+  font-family: var(--font-base);
+  background-color: var(--color-surface);
+  color: var(--color-text);
+  line-height: var(--font-lineheight-3);
+  min-block-size: 100dvh;
+}

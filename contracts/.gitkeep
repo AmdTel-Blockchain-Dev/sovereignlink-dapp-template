@@ -1,0 +1,5 @@
+// SovereignLink identity contract — Midnight Compact
+// Place .compact source files here; compile with: compact build
+
+// Example stub (not valid Compact syntax yet — replace with real contract):
+// contract SovereignIdentity { ... }
