@@ -1,0 +1,24 @@
+pragma language_version >= 0.22;
+
+import CompactStandardLibrary;
+
+// Private per-user vault: keyed by did:midnight (we'll use a commitment or opaque DID in practice)
+export ledger vault: Map<Opaque<"string">, Opaque<"string">>;  // did -> encrypted/private blob commitment (encoded string)
+
+// Circuit to store or update private data (ZK-protected, selective disclosure ready)
+export circuit storePrivateData(did: Opaque<"string">, dataCommitment: Opaque<"string">): [] {
+  vault.insert(disclose(did), disclose(dataCommitment));
+}
+
+// Circuit to prove ownership/selectively disclose a field without revealing full data
+export circuit proveOwnership(did: Opaque<"string">, proofData: Opaque<"string">): Boolean {
+  // In real use this would verify a ZK proof that the caller controls the DID
+  // For starter: compile-safe placeholder until Map lookup semantics are finalized for v0.30
+  return true;
+}
+
+// Selective disclosure placeholder circuit for starter builds.
+// TODO: Replace with Map lookup + proof-gated reveal once v0.30 map read APIs are confirmed.
+export circuit getSelectiveField(did: Opaque<"string">, fieldKey: Opaque<"string">): Boolean {
+  return true;
+}

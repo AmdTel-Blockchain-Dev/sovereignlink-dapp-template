@@ -22,3 +22,4 @@ Thumbs.db
 
 # compact compiler output
 contracts/dist/
+contracts/build/
