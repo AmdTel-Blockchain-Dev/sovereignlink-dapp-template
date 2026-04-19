@@ -1,0 +1,62 @@
+{
+  "name": "SovereignLink – Astro + Lit + Midnight + Cardano (Open Props)",
+  "image": "mcr.microsoft.com/devcontainers/typescript-node:1-22-bookworm",
+  "features": {
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {},
+    "ghcr.io/devcontainers/features/node:1": {
+      "version": "22"
+    }
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        // Core Astro + Lit + TypeScript support
+        "astro-build.astro-vscode",
+        "biomejs.biome",
+        "esbenp.prettier-vscode",
+        "dbaeumer.vscode-eslint",
+
+        // Midnight Compact language support (official)
+        "midnight-ntwrk.compact-vscode",
+
+        // General helpers (minimal)
+        "eamodio.gitlens",
+        "github.copilot",
+        "github.copilot-chat",
+        "ms-vscode.vscode-typescript-next"
+      ],
+      "settings": {
+        "editor.defaultFormatter": "biomejs.biome",
+        "editor.formatOnSave": true,
+        "editor.codeActionsOnSave": {
+          "source.fixAll.eslint": "explicit",
+          "source.organizeImports": "explicit"
+        },
+        "typescript.tsdk": "node_modules/typescript/lib",
+        "astro.typescript.enable": true,
+        "files.associations": {
+          "*.compact": "typescript"
+        },
+        // Open Props friendly settings
+        "css.customData": [".vscode/open-props.json"],
+        "editor.quickSuggestions": {
+          "strings": true
+        }
+      }
+    }
+  },
+  "postCreateCommand": "bash -c 'echo \"Installing Midnight Compact toolchain...\" && curl --proto \"=https\" --tlsv1.2 -LsSf https://github.com/midnightntwrk/compact/releases/latest/download/compact-installer.sh | sh && echo \"export PATH=\\$HOME/.cargo/bin:\\$PATH\" >> ~/.bashrc && source ~/.bashrc && compact update +latest && npm install && echo \"✅ SovereignLink dev environment ready with Open Props! Run: npm run dev\"'",
+  "forwardPorts": [4321],
+  "portsAttributes": {
+    "4321": {
+      "label": "Astro Dev Server",
+      "onAutoForward": "openPreview"
+    }
+  },
+  "remoteUser": "node",
+  "hostRequirements": {
+    "cpus": 2,
+    "memory": "4gb",
+    "storage": "32gb"
+  }
+}
