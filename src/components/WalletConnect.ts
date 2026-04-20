@@ -1,6 +1,6 @@
 import { LitElement, css, html } from "lit";
 import type { SovereignProfile } from "../lib/storage.ts";
-import { clearProfile, decrypt, encrypt, loadProfile, saveProfile } from "../lib/storage.ts";
+import { decrypt, encrypt, loadProfile, saveProfile } from "../lib/storage.ts";
 
 type Cip30Provider = {
   enable: () => Promise<unknown>;
@@ -359,8 +359,12 @@ export class WalletConnect extends LitElement {
         createdAt: Date.now(),
       };
 
+      const existingProfile = await loadProfile();
+      const profileToPersist =
+        existingProfile && existingProfile.did === did ? existingProfile : defaultProfile;
+
       // Privacy + zero-cost Tier 0: encrypted local profile/session, no transaction or funds required.
-      await saveProfile({ ...defaultProfile, walletPublicKey: hashBytes });
+      await saveProfile({ ...profileToPersist, walletPublicKey: hashBytes });
       const profile = await loadProfile();
       this.did = did;
       this.profile = profile;
@@ -454,9 +458,8 @@ export class WalletConnect extends LitElement {
 
   async logout(): Promise<void> {
     if (typeof window === "undefined") return;
-    // Logout: clears local sovereign data/session; wallet extension stays installed and user-controlled.
+    // Logout: clear session state only; encrypted sovereign profile remains local for next wallet login.
     await this._clearSessionRecord();
-    await clearProfile();
     this.did = "";
     this.profile = null;
     this.sessionToken = null;

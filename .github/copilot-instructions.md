@@ -93,6 +93,7 @@ This workflow keeps feedback loops extremely fast, costs near-zero, and maintain
 - `WalletConnect.ts` now handles CIP-30 scan/retry, connect, DID derivation, encrypted profile bootstrap, and logout/session restore.
 - `storage.ts` is the minimal browser-only sovereign vault (`sovereignlink-vault` / `profiles`) using Web Crypto + IndexedDB.
 - Session persistence is zero-cost and local-only: no backend, no cookie auth, no on-chain transaction required.
+- Profile persistence is local-first: alias/bio remain encrypted in IndexedDB across logout/login for the same DID, while logout clears only session/auth state.
 - Keep comments explicit about sovereignty/privacy/zero-cost constraints in any auth or storage flow.
 
 ## Phase 2 – Core Features
@@ -152,7 +153,12 @@ This workflow keeps feedback loops extremely fast, costs near-zero, and maintain
 - Session token payload: `{ did, iat, exp }` with 24h expiry, encrypted client-side with the same wallet-derived key material.
 - Persist session in the same IndexedDB object store using a fixed id (`session`) for simple restore.
 - On `connectedCallback`/`firstUpdated`, validate session and restore profile state before forcing wallet re-enable.
-- Logout must clear local profile + session data and dispatch `wallet-disconnected`; extension wallet remains installed.
+- On reconnect, load existing profile first and only create a default profile when no matching DID record exists.
+- Logout must clear only local session/auth state and dispatch `wallet-disconnected`; encrypted profile data remains local for next login with the same wallet DID.
+
+### Decorator compatibility in this repo
+- Prefer explicit custom element registration (`customElements.define`) over `@customElement` if parser/runtime issues appear in dev.
+- Prefer `static properties` + `declare` + constructor initialization for reactive state when decorator transforms are unavailable.
 
 ### Button/event wiring in Lit
 - Lit's `@click=${handler}` template binding can silently fail to attach during hydration in some Astro build paths.
