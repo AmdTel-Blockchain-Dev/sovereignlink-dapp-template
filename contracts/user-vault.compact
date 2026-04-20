@@ -2,6 +2,11 @@ pragma language_version >= 0.22;
 
 import CompactStandardLibrary;
 
+// SovereignLink: Phase 2 on-chain private vault.
+// Wired to the "Upgrade to Private Vault" button in SovereignProfile.ts.
+// Calling storePrivateData() requires a small NIGHT balance for the shielded tx.
+// Phase 1 uses local Tier 0 (IndexedDB + Web Crypto); this contract replaces it with ZK-protected storage.
+
 // Private per-user vault: keyed by did:midnight (we'll use a commitment or opaque DID in practice)
 export ledger vault: Map<Opaque<"string">, Opaque<"string">>;  // did -> encrypted/private blob commitment (encoded string)
 

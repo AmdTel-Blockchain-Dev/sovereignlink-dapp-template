@@ -6,7 +6,9 @@
     "dev": "astro dev",
     "build": "astro build",
     "preview": "astro preview",
-    "astro": "astro"
+    "astro": "astro",
+    "format": "biome format --write src/",
+    "check": "biome check src/"
   },
   "dependencies": {
     "@astrojs/lit": "^4.0.0",
@@ -15,6 +17,7 @@
     "open-props": "^1.7.0"
   },
   "devDependencies": {
+    "@biomejs/biome": "^1.9.0",
     "typescript": "^5.6.0"
   }
 }
