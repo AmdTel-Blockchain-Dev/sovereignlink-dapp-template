@@ -99,6 +99,46 @@ This workflow keeps feedback loops extremely fast, costs near-zero, and maintain
 - Full testnet → mainnet guide
 - GitHub Actions (optional CI for contract compilation)
 
+## Lit + Astro Integration: Learned Patterns (DO NOT REPEAT THESE MISTAKES)
+
+### How to wire a Lit component in Astro (the correct way)
+- **Do NOT use `<MyComponent client:load />`** with Astro's Lit integration for self-registering custom elements.
+  That path server-renders the component, so `connectedCallback`, `firstUpdated`, and browser lifecycle hooks never fire properly.
+- **Correct pattern**: render the raw HTML tag and import the module as a client script:
+  ```astro
+  <wallet-connect></wallet-connect>
+  <script>
+    import "../components/WalletConnect.ts";
+  </script>
+  ```
+- Remove `@astrojs/lit` integration from `astro.config.mjs` imports if using plain self-registering custom elements — it's not needed and causes SSR conflicts.
+
+### Lit reactive property declarations
+- **Do NOT use plain class field syntax** (`status = "Disconnected"`) for reactive Lit properties. TypeScript emits native class fields that shadow Lit's reactive accessors, silently breaking all reactivity and rerenders.
+- **Do NOT use `accessor`** keyword — not supported by the current Astro/Vite/TypeScript pipeline.
+- **Correct pattern**: use `declare` for property type annotations and initialize values in the constructor:
+  ```ts
+  declare status: string;
+  constructor() {
+    super();
+    this.status = "Disconnected";
+  }
+  ```
+
+### CIP-30 wallet detection
+- `window.cardano` providers are injected by extensions **after** initial page load. A one-shot scan in `connectedCallback` will miss them.
+- Scan with retries: run `_scanForWallets()` on `connectedCallback`, then again at 300ms and 1000ms via `setTimeout`, and poll via `setInterval` until wallets are found.
+- Also re-scan on `window focus` and `window load` events to handle wallet extension toggling.
+- Filter providers by checking `typeof provider.enable === "function"` — some keys on `window.cardano` are not full CIP-30 providers.
+
+### SSR boundary
+- Always guard `window` access: `if (typeof window === "undefined") return {};`
+- Never call `window.cardano` from outside a browser lifecycle hook or a `window`-guarded getter — Astro SSR will throw `window is not defined`.
+
+### Button/event wiring in Lit
+- Lit's `@click=${handler}` template binding can silently fail to attach during hydration in some Astro build paths.
+- Use `firstUpdated()` with `getElementById` + `addEventListener` as a reliable fallback. Store named handlers as class arrow functions to allow proper `removeEventListener` cleanup in `disconnectedCallback`.
+
 ## Key Resources
 - Midnight Docs & Compact: https://docs.midnight.network/
 - Mesh SDK for Midnight: https://meshjs.dev/midnight
