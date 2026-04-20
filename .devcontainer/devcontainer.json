@@ -45,7 +45,8 @@
       }
     }
   },
-  "postCreateCommand": "bash -c 'echo \"Installing Midnight Compact toolchain...\" && curl --proto \"=https\" --tlsv1.2 -LsSf https://github.com/midnightntwrk/compact/releases/latest/download/compact-installer.sh | sh && echo \"export PATH=\\$HOME/.cargo/bin:\\$PATH\" >> ~/.bashrc && source ~/.bashrc && compact update +latest && npm install && echo \"✅ SovereignLink dev environment ready with Open Props! Run: npm run dev\"'",
+  "onCreateCommand": "npm install -g pnpm",
+  "postCreateCommand": "bash -c 'echo \"Installing Midnight Compact toolchain...\" && curl --proto \"=https\" --tlsv1.2 -LsSf https://github.com/midnightntwrk/compact/releases/latest/download/compact-installer.sh | sh && echo \"export PATH=\\$HOME/.cargo/bin:\\$PATH\" >> ~/.bashrc && source ~/.bashrc && compact update && pnpm install && echo \"✅ SovereignLink dev environment ready with Open Props! Run: pnpm run dev\"'",
   "forwardPorts": [4321],
   "portsAttributes": {
     "4321": {

@@ -23,3 +23,5 @@ Thumbs.db
 # compact compiler output
 contracts/dist/
 contracts/build/
+pnpm-lock.yaml
+package-lock.json
