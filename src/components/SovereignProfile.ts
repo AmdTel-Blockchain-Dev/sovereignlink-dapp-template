@@ -1,4 +1,5 @@
 import { LitElement, css, html } from "lit";
+import { clearTemporaryIPFSCache, isTemporaryCID, resolveCID, uploadToIPFS } from "../lib/ipfs.ts";
 import { loadProfile, saveProfile } from "../lib/storage.ts";
 
 type SovereignProfileRecord = {
@@ -6,6 +7,7 @@ type SovereignProfileRecord = {
   alias: string;
   bio?: string;
   avatarCid?: string;
+  ipfsCid?: string;
   createdAt: number;
 };
 
@@ -16,6 +18,9 @@ export class SovereignProfile extends LitElement {
   static properties = {
     profile: { state: true },
     isEditing: { type: Boolean },
+    ipfsCid: { state: true },
+    isUploading: { state: true },
+    uploadError: { state: true },
   };
 
   static override styles = css`
@@ -30,10 +35,16 @@ export class SovereignProfile extends LitElement {
     .actions { display: flex; flex-wrap: wrap; gap: var(--size-2); }
     button { font: inherit; border-radius: var(--radius-2); border: var(--border-size-1) solid var(--gray-5); background: var(--surface-2); color: var(--gray-9); padding: var(--size-2) var(--size-3); }
     button:disabled { opacity: 0.65; cursor: not-allowed; }
+    a { color: var(--blue-7); }
+    .error { color: var(--red-7); font-size: var(--font-size-1); }
+    .hint { color: var(--orange-7); font-size: var(--font-size-1); }
   `;
 
   declare profile: SovereignProfileRecord | null;
   declare isEditing: boolean;
+  declare ipfsCid: string | null;
+  declare isUploading: boolean;
+  declare uploadError: string | null;
   private _walletKey: Uint8Array | null;
 
   private readonly _onProfileReady = (event: Event) => {
@@ -44,6 +55,7 @@ export class SovereignProfile extends LitElement {
   };
 
   private readonly _onWalletDisconnected = () => {
+    clearTemporaryIPFSCache();
     this.profile = null;
     this.isEditing = false;
     this._walletKey = null;
@@ -53,7 +65,16 @@ export class SovereignProfile extends LitElement {
     super();
     this.profile = null;
     this.isEditing = false;
+    this.ipfsCid = null;
+    this.isUploading = false;
+    this.uploadError = null;
     this._walletKey = null;
+  }
+
+  override updated(changed: Map<string, unknown>): void {
+    if (changed.has("profile")) {
+      this.ipfsCid = this.profile?.ipfsCid ?? null;
+    }
   }
 
   private _fromBase64(value: string): Uint8Array {
@@ -98,6 +119,28 @@ export class SovereignProfile extends LitElement {
     this.profile = loaded;
   }
 
+  async shareViaIpfs(): Promise<void> {
+    if (typeof window === "undefined" || !this.profile || this.isUploading) return;
+    this.isUploading = true;
+    this.uploadError = null;
+    try {
+      const payload = {
+        did: this.profile.did,
+        alias: this.profile.alias,
+        bio: this.profile.bio || "No bio yet",
+        sharedAt: Date.now(),
+      };
+      const cid = await uploadToIPFS(payload);
+      this.profile = { ...this.profile, ipfsCid: cid };
+      await this.saveProfileToStorage();
+      await this.loadProfileFromStorage();
+    } catch (error) {
+      this.uploadError = error instanceof Error ? error.message : "IPFS upload failed";
+    } finally {
+      this.isUploading = false;
+    }
+  }
+
   async saveProfileToStorage(): Promise<void> {
     if (typeof window === "undefined" || !this.profile) return;
     if (!this._walletKey) {
@@ -125,9 +168,22 @@ export class SovereignProfile extends LitElement {
 
   override render() {
     if (!this.profile) {
-      return html`<article><p class="value">Connect wallet to create sovereign profile</p></article>`;
+      return html`
+        <article>
+          <p class="value">Connect wallet to create sovereign profile</p>
+          <div class="field">
+            <span class="label">IPFS CID</span>
+            <p class="value">IPFS CID: none</p>
+          </div>
+          <div class="actions">
+            <button type="button" disabled>Share via IPFS</button>
+          </div>
+        </article>
+      `;
     }
     const created = new Date(this.profile.createdAt).toLocaleString();
+    const ipfsLink = this.ipfsCid ? resolveCID(this.ipfsCid) : "";
+    const usingTemporaryCid = this.ipfsCid ? isTemporaryCID(this.ipfsCid) : false;
     return html`
       <article>
         <h2>Sovereign Profile</h2>
@@ -154,8 +210,29 @@ export class SovereignProfile extends LitElement {
           <span class="label">Created</span>
           <p class="value">${created}</p>
         </div>
+        <div class="field">
+          <span class="label">IPFS CID</span>
+          <p class="value">IPFS CID: ${this.ipfsCid || "none"}</p>
+        </div>
+        ${this.ipfsCid
+          ? html`
+              <div class="field">
+                <span class="label">Public Gateway</span>
+                <a href=${ipfsLink} target="_blank" rel="noreferrer">
+                  ${usingTemporaryCid ? "View encrypted session payload" : "View on IPFS"}
+                </a>
+              </div>
+            `
+          : html``}
+        ${usingTemporaryCid
+          ? html`<p class="hint">Temporary session fallback active: CID is local-only until logout/close.</p>`
+          : html``}
+        ${this.uploadError ? html`<p class="error">${this.uploadError}</p>` : html``}
         <div class="actions">
           <button type="button" @click=${this.toggleEdit}>${this.isEditing ? "Save" : "Edit"}</button>
+          <button type="button" ?disabled=${this.isUploading} @click=${this.shareViaIpfs}>
+            ${this.isUploading ? "Uploading..." : "Share via IPFS"}
+          </button>
           <button type="button" disabled>Upgrade to Private Vault</button>
         </div>
       </article>

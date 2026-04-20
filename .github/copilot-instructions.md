@@ -94,6 +94,8 @@ This workflow keeps feedback loops extremely fast, costs near-zero, and maintain
 - `storage.ts` is the minimal browser-only sovereign vault (`sovereignlink-vault` / `profiles`) using Web Crypto + IndexedDB.
 - Session persistence is zero-cost and local-only: no backend, no cookie auth, no on-chain transaction required.
 - Profile persistence is local-first: alias/bio remain encrypted in IndexedDB across logout/login for the same DID, while logout clears only session/auth state.
+- `ipfs.ts` adds lightweight encrypted profile sharing: payload is encrypted client-side, upload attempts public IPFS add endpoints, and only CID is persisted in local encrypted profile data.
+- Browser CORS can block direct public IPFS uploads in Codespaces/preview origins; current baseline includes a temporary session-only encrypted fallback CID for demo continuity.
 - Keep comments explicit about sovereignty/privacy/zero-cost constraints in any auth or storage flow.
 
 ## Phase 2 – Core Features
@@ -155,6 +157,12 @@ This workflow keeps feedback loops extremely fast, costs near-zero, and maintain
 - On `connectedCallback`/`firstUpdated`, validate session and restore profile state before forcing wallet re-enable.
 - On reconnect, load existing profile first and only create a default profile when no matching DID record exists.
 - Logout must clear only local session/auth state and dispatch `wallet-disconnected`; encrypted profile data remains local for next login with the same wallet DID.
+
+### IPFS upload in browser-constrained environments
+- Public gateways like `ipfs.io` often reject browser POST `/api/v0/add` requests due to ACAO/CORS limits; this is expected in many preview origins.
+- Keep upload flow lightweight and browser-first: try relay/direct upload first, then fall back to temporary session-only encrypted storage if blocked.
+- Temporary fallback CIDs must be clearly labeled as local-only and ephemeral (cleared on logout/session end), not durable public IPFS content.
+- For durable uploads, migrate to user-provided authenticated pinning (`Pinata` / `nft.storage`) or same-origin function proxy.
 
 ### Decorator compatibility in this repo
 - Prefer explicit custom element registration (`customElements.define`) over `@customElement` if parser/runtime issues appear in dev.

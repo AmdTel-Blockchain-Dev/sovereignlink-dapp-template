@@ -3,6 +3,7 @@ export type SovereignProfile = {
   alias: string;
   bio?: string;
   avatarCid?: string;
+  ipfsCid?: string;
   createdAt: number;
 };
 
