@@ -33,19 +33,19 @@ async function deriveAesKey(walletPublicKey: Uint8Array): Promise<CryptoKey> {
     toArrayBuffer(walletPublicKey),
     "PBKDF2",
     false,
-    ["deriveKey"]
+    ["deriveKey"],
   );
   return crypto.subtle.deriveKey(
     {
       name: "PBKDF2",
       salt: new TextEncoder().encode(`${DB_NAME}:${STORE}`),
       iterations: 120_000,
-      hash: "SHA-256"
+      hash: "SHA-256",
     },
     material,
     { name: "AES-GCM", length: 256 },
     false,
-    ["encrypt", "decrypt"]
+    ["encrypt", "decrypt"],
   );
 }
 
@@ -53,7 +53,9 @@ export async function encrypt(data: unknown, key: Uint8Array): Promise<string> {
   const iv = crypto.getRandomValues(new Uint8Array(12));
   const aesKey = await deriveAesKey(key);
   const plain = new TextEncoder().encode(JSON.stringify(data));
-  const sealed = new Uint8Array(await crypto.subtle.encrypt({ name: "AES-GCM", iv }, aesKey, plain));
+  const sealed = new Uint8Array(
+    await crypto.subtle.encrypt({ name: "AES-GCM", iv }, aesKey, plain),
+  );
   return `${toBase64(iv)}.${toBase64(sealed)}`;
 }
 
@@ -64,7 +66,7 @@ export async function decrypt(ciphertext: string, key: Uint8Array): Promise<unkn
   const opened = await crypto.subtle.decrypt(
     { name: "AES-GCM", iv: toArrayBuffer(fromBase64(ivB64)) },
     aesKey,
-    toArrayBuffer(fromBase64(bodyB64))
+    toArrayBuffer(fromBase64(bodyB64)),
   );
   return JSON.parse(new TextDecoder().decode(opened));
 }
@@ -80,14 +82,16 @@ async function getDb(): Promise<IDBDatabase | null> {
   });
 }
 
-export async function saveProfile(data: SovereignProfile & { walletPublicKey: Uint8Array }): Promise<void | null> {
+export async function saveProfile(
+  data: SovereignProfile & { walletPublicKey: Uint8Array },
+): Promise<void | null> {
   const db = await getDb();
   if (!db) return null;
   const { walletPublicKey, ...profile } = data;
   const record: VaultRecord = {
     id: "me",
     ciphertext: await encrypt(profile, walletPublicKey),
-    walletKeyB64: toBase64(walletPublicKey)
+    walletKeyB64: toBase64(walletPublicKey),
   };
   await new Promise<void>((resolve, reject) => {
     const tx = db.transaction(STORE, "readwrite");

@@ -426,7 +426,10 @@ export class WalletConnect extends LitElement {
     const walletKey = await this._getStoredWalletKey();
     if (!walletKey) return false;
     try {
-      const payload = (await decrypt(session.ciphertext, walletKey)) as { did: string; exp: number };
+      const payload = (await decrypt(session.ciphertext, walletKey)) as {
+        did: string;
+        exp: number;
+      };
       if (payload.exp <= Date.now()) throw new Error("Session expired");
       const profile = await loadProfile();
       if (!profile) throw new Error("No profile for session");
@@ -475,7 +478,12 @@ export class WalletConnect extends LitElement {
   }
 
   override render() {
-    console.log("[WalletConnect] render() called - status:", this.status, "isConnecting:", this.isConnecting);
+    console.log(
+      "[WalletConnect] render() called - status:",
+      this.status,
+      "isConnecting:",
+      this.isConnecting,
+    );
     const wallets = this.detectedWallets;
 
     return html`
@@ -483,11 +491,11 @@ export class WalletConnect extends LitElement {
         Wallet
       </label>
       <select id="wallet-select" ?disabled=${this.isConnecting || wallets.length === 0} .value=${this.selectedWallet}>
-        ${wallets.length
-          ? wallets.map(
-              (wallet) => html`<option value=${wallet}>${wallet}</option>`,
-            )
-          : html`<option value="">No wallets detected</option>`}
+        ${
+          wallets.length
+            ? wallets.map((wallet) => html`<option value=${wallet}>${wallet}</option>`)
+            : html`<option value="">No wallets detected</option>`
+        }
       </select>
       <button id="connect-wallet-button" ?disabled=${this.isConnecting || wallets.length === 0}>
         ${this.isConnecting ? "Connecting..." : "Connect Wallet"}
@@ -498,9 +506,11 @@ export class WalletConnect extends LitElement {
       <p>Status: ${this.status}${this.walletName ? ` (${this.walletName})` : ""}</p>
       <p>DID: ${this.did || "Not derived yet"}</p>
       <p>Alias: ${this.profile?.alias || "No profile loaded"}</p>
-      ${this.isLoggedIn
-        ? html`<p>Logged in as ${this.profile?.alias || "Sovereign User"} (${this.did})</p>`
-        : null}
+      ${
+        this.isLoggedIn
+          ? html`<p>Logged in as ${this.profile?.alias || "Sovereign User"} (${this.did})</p>`
+          : null
+      }
       <button id="view-profile-button" type="button" ?disabled=${!this.profile}>
         View Profile
       </button>

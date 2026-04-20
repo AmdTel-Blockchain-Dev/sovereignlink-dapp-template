@@ -196,15 +196,19 @@ export class SovereignProfile extends LitElement {
         </div>
         <div class="field">
           <span class="label">Alias</span>
-          ${this.isEditing
-            ? html`<input name="alias" .value=${this.profile.alias} @input=${this.handleInputChange} />`
-            : html`<p class="value">${this.profile.alias || "Sovereign User"}</p>`}
+          ${
+            this.isEditing
+              ? html`<input name="alias" .value=${this.profile.alias} @input=${this.handleInputChange} />`
+              : html`<p class="value">${this.profile.alias || "Sovereign User"}</p>`
+          }
         </div>
         <div class="field">
           <span class="label">Bio</span>
-          ${this.isEditing
-            ? html`<textarea name="bio" .value=${this.profile.bio ?? ""} @input=${this.handleInputChange}></textarea>`
-            : html`<p class="value">${this.profile.bio || "No bio yet"}</p>`}
+          ${
+            this.isEditing
+              ? html`<textarea name="bio" .value=${this.profile.bio ?? ""} @input=${this.handleInputChange}></textarea>`
+              : html`<p class="value">${this.profile.bio || "No bio yet"}</p>`
+          }
         </div>
         <div class="field">
           <span class="label">Created</span>
@@ -214,8 +218,9 @@ export class SovereignProfile extends LitElement {
           <span class="label">IPFS CID</span>
           <p class="value">IPFS CID: ${this.ipfsCid || "none"}</p>
         </div>
-        ${this.ipfsCid
-          ? html`
+        ${
+          this.ipfsCid
+            ? html`
               <div class="field">
                 <span class="label">Public Gateway</span>
                 <a href=${ipfsLink} target="_blank" rel="noreferrer">
@@ -223,17 +228,34 @@ export class SovereignProfile extends LitElement {
                 </a>
               </div>
             `
-          : html``}
-        ${usingTemporaryCid
-          ? html`<p class="hint">Temporary session fallback active: CID is local-only until logout/close.</p>`
-          : html``}
+            : html``
+        }
+        ${
+          usingTemporaryCid
+            ? html`<p class="hint">Temporary session fallback active: CID is local-only until logout/close.</p>`
+            : html``
+        }
         ${this.uploadError ? html`<p class="error">${this.uploadError}</p>` : html``}
         <div class="actions">
           <button type="button" @click=${this.toggleEdit}>${this.isEditing ? "Save" : "Edit"}</button>
           <button type="button" ?disabled=${this.isUploading} @click=${this.shareViaIpfs}>
             ${this.isUploading ? "Uploading..." : "Share via IPFS"}
           </button>
-          <button type="button" disabled>Upgrade to Private Vault</button>
+          <!-- Phase 2 bridge: clicking this will initialise user-vault.compact on Midnight.
+               ZK-protected shielded storage replaces Tier 0 local vault.
+               Requires a small NIGHT balance to submit the storePrivateData() circuit tx. -->
+          <button
+            type="button"
+            @click=${() => {
+              // TODO: Phase 2 – Initialise Midnight user-vault.compact with this DID
+              // eslint-disable-next-line no-console
+              console.log(
+                "TODO: Phase 2 – Initialise Midnight user-vault.compact with this DID",
+                this.profile?.did,
+              );
+            }}
+          >Upgrade to Private Vault</button>
+          <p class="hint">Requires small NIGHT balance for shielded storage (Phase 2).</p>
         </div>
       </article>
     `;

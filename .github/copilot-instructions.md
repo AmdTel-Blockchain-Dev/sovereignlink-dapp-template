@@ -82,12 +82,14 @@ This workflow keeps feedback loops extremely fast, costs near-zero, and maintain
 - Add `netlify.toml` at root for explicit control (see below).
 - Enable branch deploys for all branches or PRs.
 
-## Phase 1 – Foundation (Current Priority)
-- Astro + Lit + Open Props skeleton with static output
-- Midnight Compact toolchain + first contracts (in progress)
-- Wallet connection with deterministic did:midnight derivation (implemented)
-- Encrypted local Tier 0 profile + 24h encrypted session persistence (implemented)
-- Basic user-vault contract integration (next)
+## Phase 1 – Foundation (COMPLETE ✓ – April 2026)
+- ✅ Astro + Lit + Open Props skeleton with static output
+- ✅ Midnight Compact toolchain + first contracts (`user-vault.compact` compiled and stub-wired)
+- ✅ Wallet connection with deterministic `did:midnight` derivation (CIP-30, zero-cost)
+- ✅ Encrypted local Tier 0 profile + 24h encrypted session persistence (IndexedDB + Web Crypto)
+- ✅ IPFS encrypted profile sharing with session-only fallback CID
+- ✅ `SovereignProfile` component with edit, save, IPFS share, and Phase 2 vault upgrade stub
+- ✅ Biome formatting, Netlify deploy config, and devcontainer setup
 
 ## Current Phase 1 Status (April 2026)
 - `WalletConnect.ts` now handles CIP-30 scan/retry, connect, DID derivation, encrypted profile bootstrap, and logout/session restore.
@@ -98,10 +100,12 @@ This workflow keeps feedback loops extremely fast, costs near-zero, and maintain
 - Browser CORS can block direct public IPFS uploads in Codespaces/preview origins; current baseline includes a temporary session-only encrypted fallback CID for demo continuity.
 - Keep comments explicit about sovereignty/privacy/zero-cost constraints in any auth or storage flow.
 
-## Phase 2 – Core Features
-- Private storage UI (shielded JSON blobs)
-- Selective-disclosure proof generation & sharing
-- Minimal sharing feed (bulletin-board style)
+## Phase 2 – Core Features (Next Up)
+- Private storage UI: shielded JSON blobs stored via `user-vault.compact` (requires small NIGHT balance for on-chain tx)
+- ZK selective-disclosure proof generation & sharing (Midnight Compact circuits)
+- Minimal sharing feed via `sharing-feed.compact` (bulletin-board style, verifiable attestations)
+- `ShareModal` Lit component for per-field selective disclosure
+- Optional: Cardano anchoring for public attestations cross-chain
 
 ## Phase 3 – Polish & Production
 - Optional Qwik island only if needed
@@ -171,6 +175,56 @@ This workflow keeps feedback loops extremely fast, costs near-zero, and maintain
 ### Button/event wiring in Lit
 - Lit's `@click=${handler}` template binding can silently fail to attach during hydration in some Astro build paths.
 - Use `firstUpdated()` with `getElementById` + `addEventListener` as a reliable fallback. Store named handlers as class arrow functions to allow proper `removeEventListener` cleanup in `disconnectedCallback`.
+
+## Learned Patterns – Login & Storage
+
+### Session token persistence
+- Token payload: `{ did, iat, exp }` with 24h expiry.
+- Encrypted client-side with wallet-derived key material and stored in the same IndexedDB store as the profile (key: `session`).
+- On component mount, decrypt and validate `exp`; restore profile state without forcing wallet re-enable.
+- On logout, delete only the session record; profile remains encrypted locally for the next login with the same DID.
+
+### DID derivation from CIP-30 wallet
+- Call `wallet.getUsedAddresses()` (fallback `getUnusedAddresses()`), take the first address.
+- Derive: `did:midnight:<sha256hex(firstAddress)>` — deterministic, zero-cost, no on-chain transaction.
+- Store the raw wallet key (base64) in IndexedDB `profiles` for later encryption/decryption operations.
+- Never log or expose raw key material beyond the encrypted store.
+
+### IPFS encrypted profile sharing
+- Encrypt payload client-side with Web Crypto AES-GCM before any upload attempt.
+- Upload to a public IPFS add endpoint (e.g. `https://ipfs.io/api/v0/add`).
+- If CORS blocks the upload (common in Codespaces/preview origins), fall back to a temporary session-only encrypted CID (`tmp:...`) that is cleared on logout.
+- Only persist the CID in the local encrypted profile — never raw payload.
+- For durable uploads, migrate to authenticated pinning (Pinata / nft.storage) or a same-origin Netlify function proxy.
+
+### Correct Lit patterns (reuse these)
+```ts
+// ✅ Reactive property — use declare + constructor, NOT plain class fields
+declare status: string;
+constructor() { super(); this.status = "Disconnected"; }
+
+// ✅ Event listeners — wire in firstUpdated, clean up in disconnectedCallback
+override firstUpdated() {
+  window.addEventListener("wallet-connected", this._onConnect);
+}
+override disconnectedCallback() {
+  window.removeEventListener("wallet-connected", this._onConnect);
+  super.disconnectedCallback();
+}
+
+// ✅ Astro integration — raw tag + script import
+// <sovereign-profile></sovereign-profile>
+// <script>import "../components/SovereignProfile.ts";</script>
+// Do NOT use <SovereignProfile client:load /> — lifecycle hooks won't fire.
+```
+
+### Sovereignty/privacy comment templates
+```ts
+// Sovereign: DID derived client-side from wallet address — no central authority, no server.
+// Zero-cost: session is encrypted locally; no on-chain transaction required for login.
+// Private vault: profile data encrypted with wallet-derived key; only CID stored if shared via IPFS.
+// Phase 2 bridge: Midnight user-vault.compact will replace local Tier 0 with ZK-protected on-chain storage.
+```
 
 ## Key Resources
 - Midnight Docs & Compact: https://docs.midnight.network/

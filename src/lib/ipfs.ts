@@ -45,7 +45,8 @@ export function isTemporaryCID(cid: string): boolean {
 }
 
 async function saveTemporaryUpload(payload: string): Promise<string> {
-  if (typeof window === "undefined") throw new Error("Temporary upload cache requires browser environment");
+  if (typeof window === "undefined")
+    throw new Error("Temporary upload cache requires browser environment");
   const cid = await makeTemporaryCid(payload);
   sessionStorage.setItem(`${TEMP_KEY_PREFIX}${cid}`, payload);
   return cid;
@@ -68,7 +69,9 @@ export async function uploadToIPFS(data: unknown, gateway = "https://ipfs.io"): 
   const form = new FormData();
   form.append("file", new Blob([encrypted], { type: "text/plain" }), "sovereignlink-profile.enc");
   // Replace with Pinata/nft.storage when user provides API key.
-  const directEndpoint = gateway ? `${gateway.replace(/\/$/, "")}/api/v0/add?pin=true` : DEFAULT_ADD;
+  const directEndpoint = gateway
+    ? `${gateway.replace(/\/$/, "")}/api/v0/add?pin=true`
+    : DEFAULT_ADD;
   const relayEndpoint = `${CORS_RELAY}/${encodeURIComponent(directEndpoint)}`;
   let response: Response;
   let uploadFailed = false;
