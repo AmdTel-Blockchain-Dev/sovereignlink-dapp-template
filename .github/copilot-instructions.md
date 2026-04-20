@@ -5,14 +5,14 @@ We are building **SovereignLink**: a minimal Astro + Lit web component template 
 
 Core goals:
 - Users log in with their **did:midnight** via wallet (Lace or any Midnight-enabled wallet)
-- Private per-user storage using Midnight Compact contracts (shielded state + ZK-selective disclosure)
+- Private per-user storage starts client-side (encrypted browser vault), then expands to Midnight Compact contracts
 - Secure peer-to-peer data sharing with ZK proofs
 - Everything stays client-side where possible — no backend server
 - Codebase must remain as small and lightweight as possible
 
 ## Core Design Principles (Always Follow These)
 - **Astro-first**: Use Astro pages, layouts, and islands for everything possible. Prefer static output (`output: 'static'` in astro.config.mjs) for fastest deploys.
-- **Lit only for interactive components**: WalletConnect, ProfileCard, ShareModal, SharedFeed, etc. Keep each under ~150 lines.
+- **Lit only for interactive components**: WalletConnect, ProfileCard, ShareModal, SharedFeed, etc. Keep components compact and split helpers when one file grows past ~220 lines.
 - **No heavy frameworks**: Avoid React, Vue, Svelte. Consider Qwik only later for real-time feed if Lit reactivity becomes limiting.
 - **Styling**: Use **CSS Open Props** exclusively (`@import "open-props/style";` in global.css). No Tailwind or utility-class clutter. Use semantic custom properties (`var(--surface-1)`, `var(--size-4)`, etc.) directly in Lit `<style>` or global CSS.
 - **Blockchain layer**: Midnight Compact (latest v0.28+) for private logic + Mesh SDK (`@meshsdk/midnight-setup` or equivalent) for client-side integration. Anchor public attestations on Cardano when useful.
@@ -32,13 +32,13 @@ SovereignLink/
 ├── src/
 │   ├── components/                 # Lit web components (client islands)
 │   ├── layouts/
-│   │   └── BaseLayout.astro
+│   │   └── Layout.astro
 │   ├── pages/
 │   │   └── index.astro             # Main dashboard
 │   ├── lib/
 │   │   ├── mesh.ts                 # Mesh SDK + wallet helpers
 │   │   ├── did.ts                  # DID + VC helpers
-│   │   └── contracts.ts            # Contract calls & proofs
+│   │   └── storage.ts              # Encrypted local profile/session storage (Phase 1)
 │   └── styles/
 │       └── global.css              # Open Props + project tokens
 ├── astro.config.mjs
@@ -84,9 +84,16 @@ This workflow keeps feedback loops extremely fast, costs near-zero, and maintain
 
 ## Phase 1 – Foundation (Current Priority)
 - Astro + Lit + Open Props skeleton with static output
-- Midnight Compact toolchain + first contracts
-- Wallet connection with did:midnight + ZK proof
-- Basic user-vault contract integration
+- Midnight Compact toolchain + first contracts (in progress)
+- Wallet connection with deterministic did:midnight derivation (implemented)
+- Encrypted local Tier 0 profile + 24h encrypted session persistence (implemented)
+- Basic user-vault contract integration (next)
+
+## Current Phase 1 Status (April 2026)
+- `WalletConnect.ts` now handles CIP-30 scan/retry, connect, DID derivation, encrypted profile bootstrap, and logout/session restore.
+- `storage.ts` is the minimal browser-only sovereign vault (`sovereignlink-vault` / `profiles`) using Web Crypto + IndexedDB.
+- Session persistence is zero-cost and local-only: no backend, no cookie auth, no on-chain transaction required.
+- Keep comments explicit about sovereignty/privacy/zero-cost constraints in any auth or storage flow.
 
 ## Phase 2 – Core Features
 - Private storage UI (shielded JSON blobs)
@@ -111,7 +118,7 @@ This workflow keeps feedback loops extremely fast, costs near-zero, and maintain
     import "../components/WalletConnect.ts";
   </script>
   ```
-- Remove `@astrojs/lit` integration from `astro.config.mjs` imports if using plain self-registering custom elements — it's not needed and causes SSR conflicts.
+- If lifecycle issues appear, prefer the raw-tag + script-import pattern first and avoid introducing mixed hydration approaches.
 
 ### Lit reactive property declarations
 - **Do NOT use plain class field syntax** (`status = "Disconnected"`) for reactive Lit properties. TypeScript emits native class fields that shadow Lit's reactive accessors, silently breaking all reactivity and rerenders.
@@ -134,6 +141,18 @@ This workflow keeps feedback loops extremely fast, costs near-zero, and maintain
 ### SSR boundary
 - Always guard `window` access: `if (typeof window === "undefined") return {};`
 - Never call `window.cardano` from outside a browser lifecycle hook or a `window`-guarded getter — Astro SSR will throw `window is not defined`.
+- For storage/session methods, guard browser APIs early: `if (typeof window === "undefined") return null/false;`.
+
+### Web Crypto + TypeScript gotcha (important)
+- In strict TS DOM libs, `Uint8Array<ArrayBufferLike>` may fail `BufferSource` checks for `crypto.subtle.*`.
+- Normalize to a guaranteed `ArrayBuffer` before `importKey`/`decrypt` calls to avoid recurring type errors.
+- Keep this helper local and minimal instead of adding crypto dependencies.
+
+### Session and logout pattern (current baseline)
+- Session token payload: `{ did, iat, exp }` with 24h expiry, encrypted client-side with the same wallet-derived key material.
+- Persist session in the same IndexedDB object store using a fixed id (`session`) for simple restore.
+- On `connectedCallback`/`firstUpdated`, validate session and restore profile state before forcing wallet re-enable.
+- Logout must clear local profile + session data and dispatch `wallet-disconnected`; extension wallet remains installed.
 
 ### Button/event wiring in Lit
 - Lit's `@click=${handler}` template binding can silently fail to attach during hydration in some Astro build paths.
@@ -149,6 +168,8 @@ When implementing any change:
 - Keep it minimal and aligned with principles
 - Use clean Open Props variables
 - Include comments explaining the privacy/sovereign aspect
+- Reuse successful patterns from `WalletConnect.ts` + `storage.ts` before inventing new auth/storage flows
+- Prefer fixes that reduce repeated TS/Web Crypto typing regressions
 - Confirm which phase/step we are on in your response
 
 Let's keep SovereignLink the cleanest, smallest, and most privacy-preserving Midnight + Cardano identity template.
