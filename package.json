@@ -17,7 +17,7 @@
     "open-props": "^1.7.0"
   },
   "devDependencies": {
-    "@biomejs/biome": "^1.9.0",
+    "@biomejs/biome": "^2.4.9",
     "typescript": "^5.6.0"
   }
 }
