@@ -15,7 +15,7 @@ Core goals:
 - **Lit only for interactive components**: WalletConnect, ProfileCard, ShareModal, SharedFeed, etc. Keep components compact and split helpers when one file grows past ~220 lines.
 - **No heavy frameworks**: Avoid React, Vue, Svelte. Consider Qwik only later for real-time feed if Lit reactivity becomes limiting.
 - **Styling**: Use **CSS Open Props** exclusively (`@import "open-props/style";` in global.css). No Tailwind or utility-class clutter. Use semantic custom properties (`var(--surface-1)`, `var(--size-4)`, etc.) directly in Lit `<style>` or global CSS.
-- **Blockchain layer**: Midnight Compact (latest v0.28+) for private logic + Mesh SDK (`@meshsdk/midnight-setup` or equivalent) for client-side integration. Anchor public attestations on Cardano when useful.
+- **Blockchain layer**: Midnight Compact for private logic + Mesh SDK (`@meshsdk/core` or latest lightweight official Midnight package) for client-side integration. Anchor public attestations on Cardano when useful.
 - **Identity foundation**: did:midnight + ZK-selective-disclosure Verifiable Credentials.
 - **Minimal dependencies**: Keep `package.json` under ~12 direct dependencies total.
 
@@ -175,6 +175,13 @@ This workflow keeps feedback loops extremely fast, costs near-zero, and maintain
 ### Button/event wiring in Lit
 - Lit's `@click=${handler}` template binding can silently fail to attach during hydration in some Astro build paths.
 - Use `firstUpdated()` with `getElementById` + `addEventListener` as a reliable fallback. Store named handlers as class arrow functions to allow proper `removeEventListener` cleanup in `disconnectedCallback`.
+
+### Phase 2 zero-cost testing setup
+- Default environment for starter dev should be local devnet (`PUBLIC_MIDNIGHT_ENV=local-devnet`) to keep testing zero-cost.
+- Environment policy: local devnet = zero cost, testnet = faucet-funded tNIGHT, mainnet later.
+- Keep Mesh dependencies minimal and installable: prefer published lightweight packages (current baseline: `@meshsdk/core`).
+- If TypeScript reports `Property 'env' does not exist on type 'ImportMeta'`, add `src/env.d.ts` with `/// <reference types="astro/client" />`.
+- If Compact compile reports a language mismatch, align `pragma language_version` in `.compact` files with the local installed `compact` CLI version.
 
 ## Learned Patterns – Login & Storage
 

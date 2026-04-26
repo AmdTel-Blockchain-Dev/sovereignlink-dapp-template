@@ -1,5 +1,6 @@
-import { LitElement, css, html } from "lit";
+import { css, html, LitElement } from "lit";
 import { clearTemporaryIPFSCache, isTemporaryCID, resolveCID, uploadToIPFS } from "../lib/ipfs.ts";
+import { buildStorePrivateDataTx, connectMidnightWallet, submitTx } from "../lib/mesh.ts";
 import { loadProfile, saveProfile } from "../lib/storage.ts";
 
 type SovereignProfileRecord = {
@@ -166,6 +167,29 @@ export class SovereignProfile extends LitElement {
     this.profile = { ...this.profile, [key]: target.value };
   }
 
+  async upgradeToPrivateVault(): Promise<void> {
+    if (typeof window === "undefined" || !this.profile) return;
+
+    try {
+      const session = await connectMidnightWallet();
+      const dataCommitment = this.profile.ipfsCid || `local-${this.profile.did}-${this.profile.createdAt}`;
+      const tx = await buildStorePrivateDataTx(this.profile.did, dataCommitment);
+      const txHash = await submitTx(tx);
+
+      // TODO(Phase 2): replace console-only flow with real contract tx lifecycle UI.
+      // eslint-disable-next-line no-console
+      console.log("Phase 2 private vault upgrade stub", {
+        wallet: session.walletName,
+        environment: session.environment,
+        txHash,
+        did: this.profile.did,
+      });
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error("Private vault upgrade stub failed", error);
+    }
+  }
+
   override render() {
     if (!this.profile) {
       return html`
@@ -244,17 +268,7 @@ export class SovereignProfile extends LitElement {
           <!-- Phase 2 bridge: clicking this will initialise user-vault.compact on Midnight.
                ZK-protected shielded storage replaces Tier 0 local vault.
                Requires a small NIGHT balance to submit the storePrivateData() circuit tx. -->
-          <button
-            type="button"
-            @click=${() => {
-              // TODO: Phase 2 – Initialise Midnight user-vault.compact with this DID
-              // eslint-disable-next-line no-console
-              console.log(
-                "TODO: Phase 2 – Initialise Midnight user-vault.compact with this DID",
-                this.profile?.did,
-              );
-            }}
-          >Upgrade to Private Vault</button>
+          <button type="button" @click=${this.upgradeToPrivateVault}>Upgrade to Private Vault</button>
           <p class="hint">Requires small NIGHT balance for shielded storage (Phase 2).</p>
         </div>
       </article>
