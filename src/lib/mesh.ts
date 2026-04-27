@@ -11,11 +11,23 @@ export const MIDNIGHT_ENV = {
 
 export type MidnightEnv = (typeof MIDNIGHT_ENV)[keyof typeof MIDNIGHT_ENV];
 
-export const ACTIVE_MIDNIGHT_ENV: MidnightEnv =
-  (import.meta.env.PUBLIC_MIDNIGHT_ENV as MidnightEnv | undefined) ?? MIDNIGHT_ENV.LOCAL_DEVNET;
+type Cip30WalletApi = {
+  submitTx?: (tx: string) => Promise<string>;
+};
+
+export type StorePrivateDataTx = {
+  kind: "midnight-compact-call";
+  circuit: "storePrivateData";
+  args: {
+    did: string;
+    dataCommitment: string;
+  };
+  environment: MidnightEnv;
+  zeroCostLocalDevnet: boolean;
+};
 
 type Cip30Provider = {
-  enable: () => Promise<unknown>;
+  enable: () => Promise<Cip30WalletApi>;
 };
 
 type CardanoWindow = Window & {
@@ -24,9 +36,23 @@ type CardanoWindow = Window & {
 
 export type MidnightWalletSession = {
   walletName: string;
-  api: unknown;
+  api: Cip30WalletApi;
   environment: MidnightEnv;
 };
+
+let activeWalletSession: MidnightWalletSession | null = null;
+
+function resolveMidnightEnv(value: string | undefined): MidnightEnv {
+  if (value === MIDNIGHT_ENV.TESTNET || value === MIDNIGHT_ENV.MAINNET) {
+    return value;
+  }
+
+  return MIDNIGHT_ENV.LOCAL_DEVNET;
+}
+
+export const ACTIVE_MIDNIGHT_ENV: MidnightEnv = resolveMidnightEnv(
+  import.meta.env.PUBLIC_MIDNIGHT_ENV,
+);
 
 function getCip30Providers(): Record<string, Cip30Provider | undefined> {
   if (typeof window === "undefined") {
@@ -57,7 +83,12 @@ export async function connectMidnightWallet(
     throw new Error("No CIP-30 wallet detected");
   }
 
-  const walletName = preferredWallet && wallets.includes(preferredWallet) ? preferredWallet : wallets[0];
+  const rememberedWallet = activeWalletSession?.walletName;
+  const walletName =
+    (preferredWallet && wallets.includes(preferredWallet) && preferredWallet) ||
+    (rememberedWallet && wallets.includes(rememberedWallet) && rememberedWallet) ||
+    wallets.find((name) => name.toLowerCase().includes("lace")) ||
+    wallets[0];
   const provider = getCip30Providers()[walletName];
 
   if (!provider) {
@@ -66,46 +97,71 @@ export async function connectMidnightWallet(
 
   const api = await provider.enable();
 
-  return {
+  activeWalletSession = {
     walletName,
     api,
     environment: ACTIVE_MIDNIGHT_ENV,
   };
+
+  return activeWalletSession;
 }
 
 /**
- * Build a storePrivateData transaction payload stub.
- * TODO(Phase 2): replace this with real @meshsdk/core Midnight tx builder integration.
+ * Local devnet stays zero-cost by preparing a Compact circuit payload client-side first.
+ * Testnet/mainnet can replace this payload with a full Mesh builder later.
  */
-export async function buildStorePrivateDataTx(did: string, dataCommitment: string): Promise<{
-  circuit: "storePrivateData";
-  did: string;
-  dataCommitment: string;
-  environment: MidnightEnv;
-}> {
+export async function buildStorePrivateDataTx(
+  did: string,
+  dataCommitment: string,
+): Promise<StorePrivateDataTx> {
   if (typeof window === "undefined") {
     throw new Error("Transaction building is browser-only in this starter template");
   }
 
   return {
+    kind: "midnight-compact-call",
     circuit: "storePrivateData",
-    did,
-    dataCommitment,
+    args: {
+      did,
+      dataCommitment,
+    },
     environment: ACTIVE_MIDNIGHT_ENV,
+    zeroCostLocalDevnet: ACTIVE_MIDNIGHT_ENV === MIDNIGHT_ENV.LOCAL_DEVNET,
   };
 }
 
 /**
- * Submit transaction stub.
- * Local devnet = zero cost. Testnet = faucet-funded tNIGHT. Mainnet later.
+ * Local devnet zero-cost flow: prepare the Compact call and submit through the wallet if available.
+ * If the wallet cannot submit yet, keep a deterministic stub so the Phase 2 UI remains testable.
  */
-export async function submitTx(tx: unknown): Promise<string> {
+export async function submitTx(tx: StorePrivateDataTx): Promise<string> {
   if (typeof window === "undefined") {
     throw new Error("Transaction submission is browser-only in this starter template");
   }
 
-  const mockTxHash = `stub-tx-${Date.now()}`;
-  // eslint-disable-next-line no-console
-  console.log("TODO: submit real Midnight tx via Mesh", { environment: ACTIVE_MIDNIGHT_ENV, tx, mockTxHash });
-  return mockTxHash;
+  // Phase 2 starter: this payload is not a CBOR tx body yet, so do not call CIP-30 submitTx.
+  // CIP-30 submitTx expects CBOR hex and will fail to decode JSON payloads.
+  if (tx.kind === "midnight-compact-call") {
+    const mockTxHash = `stub-tx-${Date.now()}`;
+    // eslint-disable-next-line no-console
+    console.log(
+      "Zero-cost local devnet stub: storePrivateData prepared, awaiting Mesh builder integration",
+      {
+        environment: ACTIVE_MIDNIGHT_ENV,
+        zeroCostLocalDevnet: tx.zeroCostLocalDevnet,
+        tx,
+        mockTxHash,
+      },
+    );
+    return mockTxHash;
+  }
+
+  const serializedTx = JSON.stringify(tx);
+  const walletApi = activeWalletSession?.api;
+
+  if (walletApi?.submitTx) {
+    return walletApi.submitTx(serializedTx);
+  }
+
+  throw new Error("Wallet submitTx unavailable for this transaction payload");
 }

@@ -1,24 +1,265 @@
 ---
 import Layout from "../layouts/Layout.astro";
+
+void Layout;
 ---
 
 <Layout title="SovereignLink">
-  <main
-    style="padding: var(--size-8); max-inline-size: var(--size-content-3); margin-inline: auto; display: grid; gap: var(--size-6);"
-  >
-    <h1 style="font-size: var(--font-size-6); font-weight: var(--font-weight-7); margin-block-end: var(--size-4);">
-      SovereignLink
-    </h1>
-    <p style="font-size: var(--font-size-3); color: var(--gray-7);">
-      Decentralised identity dApp — Astro + Lit + Midnight + Cardano
-    </p>
-    <section style="display: grid; gap: var(--size-5);">
+  <main class="dashboard-shell">
+    <section class="dashboard-card dashboard-header">
+      <div>
+        <h1>SovereignLink</h1>
+        <p class="lead">
+          Zero-cost local-devnet dashboard for sovereign identity and private
+          data sharing.
+        </p>
+      </div>
+      <div class="header-controls">
+        <button
+          class="theme-toggle"
+          type="button"
+          data-theme-toggle
+          aria-label="Toggle light and dark theme"
+        >
+          Toggle Theme
+        </button>
+        <p id="wallet-status">Wallet: disconnected</p>
+      </div>
       <wallet-connect></wallet-connect>
+    </section>
+
+    <section class="dashboard-card">
       <sovereign-profile></sovereign-profile>
     </section>
+
+    <section class="dashboard-card vault-card">
+      <h2>Private Vault Status</h2>
+      <p class="card-note">
+        All UI state is client-side; theme and vault status persist locally
+        encrypted where possible.
+      </p>
+      <div class="vault-grid">
+        <div>
+          <p class="k">Current Tier</p>
+          <p class="v" id="vault-tier">Tier 0 Local</p>
+        </div>
+        <div>
+          <p class="k">Last Commitment</p>
+          <p class="v mono" id="vault-commitment">none</p>
+        </div>
+        <div>
+          <p class="k">Upgrade Status</p>
+          <p class="v" id="vault-upgrade-status">Awaiting upgrade</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="dashboard-card stub-card">
+      <h2>Quick Share / Selective Disclosure</h2>
+      <p class="card-note">
+        Phase 2 stub for ZK proof flow: choose profile fields, generate proof,
+        then share with verifiers.
+      </p>
+      <button type="button" disabled>Generate ZK Share (Soon)</button>
+    </section>
+
+    <section class="dashboard-card stub-card">
+      <h2>Shared Feed</h2>
+      <p class="card-note">
+        Phase 2.5 bulletin board for attestations and selective-disclosure
+        receipts.
+      </p>
+      <div class="feed-empty">No attestations posted yet.</div>
+    </section>
   </main>
+
+  <style>
+    .dashboard-shell {
+      padding: var(--size-8);
+      margin-inline: auto;
+      max-inline-size: min(100%, 72rem);
+      display: grid;
+      gap: var(--size-5);
+    }
+    .dashboard-card {
+      border: var(--border-size-1) solid var(--color-border);
+      border-radius: var(--radius-card);
+      background: var(--surface-1);
+      padding: var(--size-4);
+      box-shadow: var(--shadow-1);
+    }
+    .dashboard-header {
+      display: grid;
+      gap: var(--size-3);
+    }
+    h1 {
+      font-size: var(--font-size-7);
+      line-height: var(--font-lineheight-1);
+      margin: 0;
+    }
+    h2 {
+      font-size: var(--font-size-4);
+      margin: 0;
+    }
+    .lead {
+      color: var(--color-text-muted);
+      margin-block-start: var(--size-2);
+    }
+    .header-controls {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      gap: var(--size-2);
+      align-items: center;
+    }
+    #wallet-status {
+      margin: 0;
+      color: var(--color-text-muted);
+      font-size: var(--font-size-1);
+    }
+    .card-note {
+      margin-block-start: var(--size-2);
+      color: var(--color-text-muted);
+    }
+    .vault-grid {
+      margin-block-start: var(--size-3);
+      display: grid;
+      gap: var(--size-3);
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+    .k {
+      margin: 0;
+      font-size: var(--font-size-0);
+      text-transform: uppercase;
+      letter-spacing: var(--font-letterspacing-3);
+      color: var(--color-text-muted);
+    }
+    .v {
+      margin: 0;
+      margin-block-start: var(--size-1);
+      color: var(--color-text);
+    }
+    .mono {
+      font-family: var(--font-mono);
+      overflow-wrap: anywhere;
+    }
+    .stub-card button {
+      margin-block-start: var(--size-3);
+      border: var(--border-size-1) solid var(--color-border);
+      border-radius: var(--radius-2);
+      background: var(--surface-2);
+      color: var(--color-text);
+      padding: var(--size-2) var(--size-3);
+      font: inherit;
+    }
+    .feed-empty {
+      margin-block-start: var(--size-3);
+      border: var(--border-size-1) dashed var(--color-border);
+      border-radius: var(--radius-2);
+      background: var(--surface-2);
+      padding: var(--size-3);
+      color: var(--color-text-muted);
+    }
+    @media (width <= 62rem) {
+      .vault-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+    @media (width <= 48rem) {
+      .dashboard-shell {
+        padding: var(--size-4);
+      }
+      .dashboard-card {
+        padding: var(--size-3);
+      }
+      h1 {
+        font-size: var(--font-size-6);
+      }
+      .header-controls {
+        flex-direction: column;
+        align-items: stretch;
+      }
+    }
+  </style>
+
   <script>
     import "../components/SovereignProfile.ts";
-import "../components/WalletConnect.ts";
+    import "../components/WalletConnect.ts";
+    import { loadProfile } from "../lib/storage.ts";
+
+    type DashboardProfile = {
+      did?: string;
+      alias?: string;
+      vaultTier?: "local" | "shielded";
+      lastCommitment?: string;
+      lastUpgradeStatus?: string;
+    } | null;
+
+    const root = document.documentElement;
+    const toggle = document.querySelector("[data-theme-toggle]");
+    const walletStatus = document.getElementById("wallet-status");
+    const tierEl = document.getElementById("vault-tier");
+    const commitmentEl = document.getElementById("vault-commitment");
+    const upgradeStatusEl = document.getElementById("vault-upgrade-status");
+
+    const setThemeLabel = () => {
+      if (!(toggle instanceof HTMLButtonElement)) return;
+      const currentTheme =
+        root.getAttribute("data-theme") === "dark" ? "dark" : "light";
+      toggle.textContent =
+        currentTheme === "dark" ? "Switch to Light" : "Switch to Dark";
+    };
+
+    const applyVaultStatus = (profile: DashboardProfile) => {
+      if (!tierEl || !commitmentEl || !upgradeStatusEl) return;
+      const isShielded = profile?.vaultTier === "shielded";
+      tierEl.textContent = isShielded ? "Tier 1 Midnight" : "Tier 0 Local";
+      commitmentEl.textContent = profile?.lastCommitment || "none";
+      upgradeStatusEl.textContent =
+        profile?.lastUpgradeStatus ||
+        (isShielded ? "Shielded on Midnight" : "Awaiting upgrade");
+    };
+
+    // Sovereign/privacy: dashboard state stays in-browser with no tracking or backend sync.
+    if (toggle instanceof HTMLButtonElement) {
+      toggle.addEventListener("click", () => {
+        const nextTheme =
+          root.getAttribute("data-theme") === "dark" ? "light" : "dark";
+        root.setAttribute("data-theme", nextTheme);
+        localStorage.setItem("sovereignlink-theme", nextTheme);
+        setThemeLabel();
+      });
+    }
+
+    window.addEventListener("wallet-connected", (event: Event) => {
+      if (!walletStatus) return;
+      const detail = (event as CustomEvent<{ wallet?: string }>).detail || {};
+      walletStatus.textContent = `Wallet: connected (${detail.wallet || "provider"})`;
+    });
+
+    window.addEventListener("wallet-disconnected", () => {
+      if (walletStatus) walletStatus.textContent = "Wallet: disconnected";
+      applyVaultStatus(null);
+    });
+
+    window.addEventListener("profile-ready", (event: Event) => {
+      const detail =
+        (event as CustomEvent<{ profile?: DashboardProfile }>).detail || {};
+      applyVaultStatus(detail.profile || null);
+    });
+
+    window.addEventListener("sovereign-profile-updated", (event: Event) => {
+      const detail =
+        (event as CustomEvent<{ profile?: DashboardProfile }>).detail || {};
+      applyVaultStatus(detail.profile || null);
+    });
+
+    setThemeLabel();
+    void loadProfile().then((profile) => {
+      applyVaultStatus(profile);
+      if (walletStatus && profile?.did) {
+        walletStatus.textContent = `Wallet: session active (${profile.alias || "Sovereign User"})`;
+      }
+    });
   </script>
 </Layout>

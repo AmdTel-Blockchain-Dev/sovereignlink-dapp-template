@@ -1,4 +1,4 @@
-import { LitElement, css, html } from "lit";
+import { css, html, LitElement } from "lit";
 import type { SovereignProfile } from "../lib/storage.ts";
 import { decrypt, encrypt, loadProfile, saveProfile } from "../lib/storage.ts";
 
@@ -37,44 +37,91 @@ export class WalletConnect extends LitElement {
 
   static override styles = css`
     :host {
+      display: block;
+    }
+    .wallet-panel {
       display: grid;
-      gap: var(--size-2, 8px);
-      align-items: start;
+      gap: var(--size-3);
+      border: var(--border-size-1) solid var(--color-border);
+      border-radius: var(--radius-3);
+      background: var(--surface-2);
+      padding: var(--size-4);
+    }
+    .wallet-header {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      gap: var(--size-2);
+      align-items: center;
+    }
+    .wallet-title {
+      font-size: var(--font-size-2);
+      font-weight: var(--font-weight-6);
+      color: var(--color-text);
+    }
+    .wallet-status {
+      font-size: var(--font-size-1);
+      color: var(--color-text-muted);
+    }
+    .wallet-controls {
+      display: grid;
+      gap: var(--size-2);
+    }
+    .wallet-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--size-2);
+      align-items: center;
+    }
+    label {
+      font-size: var(--font-size-1);
+      color: var(--color-text-muted);
+    }
+    select {
+      border: var(--border-size-1) solid var(--color-border);
+      border-radius: var(--radius-2);
+      padding: var(--size-2);
+      font: inherit;
+      background: var(--surface-1);
+      color: var(--color-text);
+      min-inline-size: 14rem;
     }
     button {
-      background-color: var(--blue-6, #1971c2);
-      color: #fff;
-      border: none;
-      border-radius: var(--radius-2, 4px);
-      padding: var(--size-2, 8px) var(--size-4, 16px);
-      font-size: var(--font-size-2, 1rem);
+      border: var(--border-size-1) solid var(--color-border);
+      border-radius: var(--radius-2);
+      padding: var(--size-2) var(--size-3);
+      font: inherit;
+      background: var(--surface-1);
+      color: var(--color-text);
       cursor: pointer;
     }
-    button:hover {
-      background-color: var(--blue-7, #1864ab);
+    .primary {
+      background: var(--color-brand);
+      border-color: var(--color-brand-strong);
+      color: var(--gray-0);
     }
     button:disabled,
     select:disabled {
       cursor: not-allowed;
-      opacity: 0.7;
+      opacity: 0.65;
     }
-    label {
-      display: grid;
-      gap: var(--size-1, 4px);
-      font-size: var(--font-size-1, 0.875rem);
-      color: var(--gray-7, #495057);
+    .wallet-meta {
+      font-size: var(--font-size-0);
+      color: var(--color-text-muted);
+      overflow-wrap: anywhere;
     }
-    select {
-      border: 1px solid var(--gray-4, #ced4da);
-      border-radius: var(--radius-2, 4px);
-      padding: var(--size-2, 8px);
-      font: inherit;
-      background: var(--surface-1, #fff);
-      color: var(--gray-9, #212529);
-    }
-    p {
-      font-size: var(--font-size-1, 0.875rem);
-      color: var(--gray-7, #495057);
+    @media (width <= 48rem) {
+      .wallet-panel {
+        padding: var(--size-3);
+      }
+      .wallet-row {
+        flex-direction: column;
+        align-items: stretch;
+      }
+      select,
+      button {
+        inline-size: 100%;
+      }
     }
   `;
 
@@ -104,10 +151,6 @@ export class WalletConnect extends LitElement {
   private readonly _handleRefreshClick = () => {
     console.log("[WalletConnect] Manual wallet scan requested");
     this._scanForWallets();
-  };
-
-  private readonly _handleViewProfileClick = () => {
-    console.log("[WalletConnect] Loaded sovereign profile:", this.profile);
   };
 
   private readonly _handleLogoutClick = () => {
@@ -171,7 +214,6 @@ export class WalletConnect extends LitElement {
     const button = this.shadowRoot?.getElementById("connect-wallet-button");
     const select = this.shadowRoot?.getElementById("wallet-select");
     const refreshButton = this.shadowRoot?.getElementById("refresh-wallets-button");
-    const viewProfileButton = this.shadowRoot?.getElementById("view-profile-button");
     const logoutButton = this.shadowRoot?.getElementById("logout-button");
 
     if (button instanceof HTMLButtonElement) {
@@ -187,11 +229,6 @@ export class WalletConnect extends LitElement {
     if (refreshButton instanceof HTMLButtonElement) {
       refreshButton.addEventListener("click", this._handleRefreshClick);
       console.log("[WalletConnect] Attached click listener to refresh button");
-    }
-
-    if (viewProfileButton instanceof HTMLButtonElement) {
-      viewProfileButton.addEventListener("click", this._handleViewProfileClick);
-      console.log("[WalletConnect] Attached click listener to view profile button");
     }
 
     if (logoutButton instanceof HTMLButtonElement) {
@@ -222,7 +259,6 @@ export class WalletConnect extends LitElement {
     const button = this.shadowRoot?.getElementById("connect-wallet-button");
     const select = this.shadowRoot?.getElementById("wallet-select");
     const refreshButton = this.shadowRoot?.getElementById("refresh-wallets-button");
-    const viewProfileButton = this.shadowRoot?.getElementById("view-profile-button");
     const logoutButton = this.shadowRoot?.getElementById("logout-button");
 
     if (button instanceof HTMLButtonElement) {
@@ -235,10 +271,6 @@ export class WalletConnect extends LitElement {
 
     if (refreshButton instanceof HTMLButtonElement) {
       refreshButton.removeEventListener("click", this._handleRefreshClick);
-    }
-
-    if (viewProfileButton instanceof HTMLButtonElement) {
-      viewProfileButton.removeEventListener("click", this._handleViewProfileClick);
     }
 
     if (logoutButton instanceof HTMLButtonElement) {
@@ -487,36 +519,54 @@ export class WalletConnect extends LitElement {
     const wallets = this.detectedWallets;
 
     return html`
-      <label for="wallet-select">
-        Wallet
-      </label>
-      <select id="wallet-select" ?disabled=${this.isConnecting || wallets.length === 0} .value=${this.selectedWallet}>
-        ${
-          wallets.length
-            ? wallets.map((wallet) => html`<option value=${wallet}>${wallet}</option>`)
-            : html`<option value="">No wallets detected</option>`
-        }
-      </select>
-      <button id="connect-wallet-button" ?disabled=${this.isConnecting || wallets.length === 0}>
-        ${this.isConnecting ? "Connecting..." : "Connect Wallet"}
-      </button>
-      <button id="refresh-wallets-button" type="button">
-        Refresh Wallets
-      </button>
-      <p>Status: ${this.status}${this.walletName ? ` (${this.walletName})` : ""}</p>
-      <p>DID: ${this.did || "Not derived yet"}</p>
-      <p>Alias: ${this.profile?.alias || "No profile loaded"}</p>
-      ${
-        this.isLoggedIn
-          ? html`<p>Logged in as ${this.profile?.alias || "Sovereign User"} (${this.did})</p>`
-          : null
-      }
-      <button id="view-profile-button" type="button" ?disabled=${!this.profile}>
-        View Profile
-      </button>
-      <button id="logout-button" type="button" ?disabled=${!this.isLoggedIn}>
-        Logout
-      </button>
+      <section class="wallet-panel">
+        <div class="wallet-header">
+          <p class="wallet-title">Wallet Status</p>
+          <p class="wallet-status">${this.status}${this.walletName ? ` (${this.walletName})` : ""}</p>
+        </div>
+
+        <div class="wallet-controls">
+          <label for="wallet-select">Wallet Provider</label>
+          <div class="wallet-row">
+            <select
+              id="wallet-select"
+              ?disabled=${this.isConnecting || wallets.length === 0 || this.isLoggedIn}
+              .value=${this.selectedWallet}
+            >
+              ${
+                wallets.length
+                  ? wallets.map((wallet) => html`<option value=${wallet}>${wallet}</option>`)
+                  : html`<option value="">No wallets detected</option>`
+              }
+            </select>
+
+            <button
+              class="primary"
+              id="connect-wallet-button"
+              ?hidden=${this.isLoggedIn}
+              ?disabled=${this.isConnecting || wallets.length === 0 || this.isLoggedIn}
+            >
+              ${this.isConnecting ? "Connecting..." : "Connect Wallet"}
+            </button>
+
+            <button id="refresh-wallets-button" type="button" ?disabled=${this.isConnecting}>
+              Refresh
+            </button>
+
+            <button
+              id="logout-button"
+              type="button"
+              ?hidden=${!this.isLoggedIn}
+              ?disabled=${!this.isLoggedIn}
+            >
+              Logout
+            </button>
+          </div>
+        </div>
+
+        <p class="wallet-meta">DID: ${this.did || "Not derived yet"}</p>
+        <p class="wallet-meta">Alias: ${this.profile?.alias || "No profile loaded"}</p>
+      </section>
     `;
   }
 }

@@ -1,13 +1,60 @@
 @import "open-props/style";
 
-/* ─── Project-specific custom properties ─────────────────────────────────── */
+/*
+  Open Props remains the single design-token source in this project.
+  Project tokens below only compose existing Open Props variables.
+*/
 
 :root {
-  --color-brand: var(--blue-6);
-  --color-surface: var(--gray-0);
-  --color-text: var(--gray-9);
+  color-scheme: light;
+
+  /* Core project tokens mapped from Open Props primitives. */
+  --sl-brand: var(--blue-6);
+  --sl-brand-strong: var(--blue-7);
+  --sl-surface-1: var(--surface-1);
+  --sl-surface-2: var(--surface-2);
+  --sl-surface-3: var(--surface-3);
+  --sl-text-1: var(--gray-9);
+  --sl-text-2: var(--gray-7);
+  --sl-border: var(--gray-3);
+
+  /* App-level aliases for easy use in Astro and Lit components. */
+  --color-brand: var(--sl-brand);
+  --color-brand-strong: var(--sl-brand-strong);
+  --color-surface: var(--sl-surface-1);
+  --color-surface-muted: var(--sl-surface-2);
+  --color-text: var(--sl-text-1);
+  --color-text-muted: var(--sl-text-2);
+  --color-border: var(--sl-border);
+
   --radius-card: var(--radius-3);
   --font-base: var(--font-sans);
+}
+
+/*
+  Sovereign UX note: theme preference is purely client-side state.
+  No server sync, no analytics, and no identity linkage is required.
+*/
+[data-theme="dark"] {
+  color-scheme: dark;
+
+  /* Override Open Props primitives to keep dark mode coherent everywhere. */
+  --surface-1: var(--gray-12);
+  --surface-2: var(--gray-11);
+  --surface-3: var(--gray-10);
+  --gray-9: var(--gray-1);
+  --gray-7: var(--gray-3);
+  --blue-6: var(--blue-4);
+  --blue-7: var(--blue-3);
+
+  --sl-brand: var(--blue-6);
+  --sl-brand-strong: var(--blue-7);
+  --sl-surface-1: var(--surface-1);
+  --sl-surface-2: var(--surface-2);
+  --sl-surface-3: var(--surface-3);
+  --sl-text-1: var(--gray-9);
+  --sl-text-2: var(--gray-7);
+  --sl-border: var(--gray-8);
 }
 
 /* ─── Base reset / globals ────────────────────────────────────────────────── */
@@ -25,4 +72,35 @@ body {
   color: var(--color-text);
   line-height: var(--font-lineheight-3);
   min-block-size: 100dvh;
+  transition:
+    background-color 140ms var(--ease-2),
+    color 140ms var(--ease-2);
+}
+
+.theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: var(--border-size-1) solid var(--color-border);
+  border-radius: var(--radius-round);
+  background: var(--color-surface-muted);
+  color: var(--color-text);
+  padding: var(--size-2) var(--size-3);
+  font: inherit;
+  font-weight: var(--font-weight-6);
+  cursor: pointer;
+  box-shadow: var(--shadow-2);
+  transition:
+    transform 120ms var(--ease-2),
+    background-color 120ms var(--ease-2);
+}
+
+.theme-toggle:hover {
+  background: var(--sl-surface-3);
+  transform: translateY(-1px);
+}
+
+.theme-toggle:focus-visible {
+  outline: var(--border-size-2) solid var(--color-brand);
+  outline-offset: var(--size-1);
 }

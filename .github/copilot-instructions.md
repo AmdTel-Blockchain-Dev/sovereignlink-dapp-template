@@ -53,7 +53,7 @@ SovereignLink/
    - Work on feature branches (`feat/wallet-connect`, `feat/user-vault`, etc.).
 
 2. **Local iteration**:
-   - Run `npm run dev` → Astro dev server on port 4321.
+  - Run `pnpm run dev` (or `npm run dev`) → Astro dev server on port 4321.
    - Compile Compact contracts locally with `compact compile`.
    - Test wallet interactions against Midnight Preview / local testnet first.
 
@@ -100,12 +100,32 @@ This workflow keeps feedback loops extremely fast, costs near-zero, and maintain
 - Browser CORS can block direct public IPFS uploads in Codespaces/preview origins; current baseline includes a temporary session-only encrypted fallback CID for demo continuity.
 - Keep comments explicit about sovereignty/privacy/zero-cost constraints in any auth or storage flow.
 
-## Phase 2 – Core Features (Next Up)
+## Phase 2 – Core Features (IN PROGRESS)
+- ✅ Dashboard UI polish in `index.astro` with ordered card flow:
+  1) Header (title + theme toggle + wallet status)
+  2) Sovereign Profile
+  3) Private Vault Status
+  4) Quick Share / Selective Disclosure stub
+  5) Shared Feed stub (Phase 2.5 placeholder)
+- ✅ Open Props-only light/dark theme tokens in `global.css` + no-flash local theme bootstrap in `Layout.astro`
+- ✅ Client-side dashboard state sync via `wallet-connected`, `wallet-disconnected`, `profile-ready`, and `sovereign-profile-updated`
+- ✅ `SovereignProfile.ts` now persists and emits vault upgrade metadata (`vaultTier`, `lastCommitment`, `lastUpgradeTx`, `lastUpgradeStatus`)
+- ✅ Shielded UX state: hide upgrade CTA after success and show `Shielded on Midnight ✓` badge
+- ✅ Wallet controls de-duplicated in `WalletConnect.ts` for cleaner logged-in state
+
+Remaining Phase 2 feature work:
 - Private storage UI: shielded JSON blobs stored via `user-vault.compact` (requires small NIGHT balance for on-chain tx)
 - ZK selective-disclosure proof generation & sharing (Midnight Compact circuits)
 - Minimal sharing feed via `sharing-feed.compact` (bulletin-board style, verifiable attestations)
 - `ShareModal` Lit component for per-field selective disclosure
 - Optional: Cardano anchoring for public attestations cross-chain
+
+## Current Phase 2 UI Status (April 2026)
+- `global.css` uses Open Props primitives + project aliases (`--color-*`, `--sl-*`) with `[data-theme="dark"]` overrides only.
+- Theme preference is local-only (`localStorage` key: `sovereignlink-theme`) and initialized in `Layout.astro` before paint.
+- `index.astro` includes responsive card/grid layout with Open Props spacing, radius, surface, and border tokens.
+- Vault status card reads from encrypted local profile data and reflects live upgrades without backend polling.
+- All dashboard UX state remains client-side; no tracking, no server persistence, and no identity linkage for theme or layout state.
 
 ## Phase 3 – Polish & Production
 - Optional Qwik island only if needed
@@ -175,6 +195,13 @@ This workflow keeps feedback loops extremely fast, costs near-zero, and maintain
 ### Button/event wiring in Lit
 - Lit's `@click=${handler}` template binding can silently fail to attach during hydration in some Astro build paths.
 - Use `firstUpdated()` with `getElementById` + `addEventListener` as a reliable fallback. Store named handlers as class arrow functions to allow proper `removeEventListener` cleanup in `disconnectedCallback`.
+- If listeners are attached in `firstUpdated()`, avoid conditionally creating/removing those target elements later in render. Prefer keeping controls in the DOM and toggling `hidden`/`disabled` for reliable wiring.
+
+### Theme + dashboard UI pattern (Phase 2)
+- Keep theme bootstrapping in `Layout.astro` `<head>` to avoid light/dark flash on first paint.
+- Keep interactive dashboard logic in `index.astro` script with raw-tag imports for Lit components.
+- Use event-driven updates for wallet/profile/vault state instead of central stores or backend APIs.
+- Preserve sovereignty comments near theme and status persistence logic: local-only state, no analytics, no server sync.
 
 ### Phase 2 zero-cost testing setup
 - Default environment for starter dev should be local devnet (`PUBLIC_MIDNIGHT_ENV=local-devnet`) to keep testing zero-cost.

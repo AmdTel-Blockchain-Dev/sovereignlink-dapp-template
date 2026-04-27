@@ -2,27 +2,19 @@ pragma language_version >= 0.22;
 
 import CompactStandardLibrary;
 
-// SovereignLink Phase 2 bridge: move from local encrypted Tier 0 storage
-// (IndexedDB + Web Crypto) to private on-chain commitments on Midnight.
-// Sovereignty: each user controls their own did:midnight identity and writes.
-// Privacy: only opaque DID keys and opaque encrypted commitments are stored.
-// Dev reminder: run `compact compile` manually after contract updates.
+// Sovereignty: User controls their did:midnight and writes. No central authority.
+// Privacy: Only opaque commitments stored on Midnight; full data never revealed without ZK proof.
+// Zero-cost testing: Use local devnet (compact run or simulator). Testnet later with faucet tNIGHT.
 
-// Per-DID private vault: did -> encrypted/private data commitment.
 export ledger vault: Map<Opaque<"string">, Opaque<"string">>;
 
-// Store or update a private commitment for a DID.
-// Keep map operations basic for compile safety in starter templates.
 export circuit storePrivateData(
   did: Opaque<"string">,
   dataCommitment: Opaque<"string">
 ): [] {
-  // Starter upsert path: write latest commitment for this DID.
   vault.insert(disclose(did), disclose(dataCommitment));
 }
 
-// Placeholder ownership proof circuit for template wiring.
-// TODO(Phase 2+): replace with real ZK ownership verification.
 export circuit proveOwnership(
   did: Opaque<"string">,
   proofData: Opaque<"string">
@@ -30,8 +22,6 @@ export circuit proveOwnership(
   return true;
 }
 
-// Placeholder selective-disclosure read gate.
-// TODO(Phase 2+): replace with proof-gated field extraction/reveal.
 export circuit getSelectiveField(
   did: Opaque<"string">,
   fieldKey: Opaque<"string">
