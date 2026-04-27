@@ -4,6 +4,10 @@ export type SovereignProfile = {
   bio?: string;
   avatarCid?: string;
   ipfsCid?: string;
+  vaultTier?: "local" | "shielded";
+  lastCommitment?: string;
+  lastUpgradeTx?: string;
+  lastUpgradeStatus?: string;
   createdAt: number;
 };
 
@@ -84,7 +88,7 @@ async function getDb(): Promise<IDBDatabase | null> {
 
 export async function saveProfile(
   data: SovereignProfile & { walletPublicKey: Uint8Array },
-): Promise<void | null> {
+): Promise<undefined | null> {
   const db = await getDb();
   if (!db) return null;
   const { walletPublicKey, ...profile } = data;
@@ -114,7 +118,7 @@ export async function loadProfile(): Promise<SovereignProfile | null> {
   return (await decrypt(record.ciphertext, fromBase64(record.walletKeyB64))) as SovereignProfile;
 }
 
-export async function clearProfile(): Promise<void | null> {
+export async function clearProfile(): Promise<undefined | null> {
   const db = await getDb();
   if (!db) return null;
   await new Promise<void>((resolve, reject) => {

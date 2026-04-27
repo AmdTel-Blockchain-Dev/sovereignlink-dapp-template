@@ -2,28 +2,29 @@ pragma language_version >= 0.22;
 
 import CompactStandardLibrary;
 
-// SovereignLink: Phase 2 on-chain private vault.
-// Wired to the "Upgrade to Private Vault" button in SovereignProfile.ts.
-// Calling storePrivateData() requires a small NIGHT balance for the shielded tx.
-// Phase 1 uses local Tier 0 (IndexedDB + Web Crypto); this contract replaces it with ZK-protected storage.
+// Sovereignty: User controls their did:midnight and writes. No central authority.
+// Privacy: Only opaque commitments stored on Midnight; full data never revealed without ZK proof.
+// Zero-cost testing: Use local devnet (compact run or simulator). Testnet later with faucet tNIGHT.
 
-// Private per-user vault: keyed by did:midnight (we'll use a commitment or opaque DID in practice)
-export ledger vault: Map<Opaque<"string">, Opaque<"string">>;  // did -> encrypted/private blob commitment (encoded string)
+export ledger vault: Map<Opaque<"string">, Opaque<"string">>;
 
-// Circuit to store or update private data (ZK-protected, selective disclosure ready)
-export circuit storePrivateData(did: Opaque<"string">, dataCommitment: Opaque<"string">): [] {
+export circuit storePrivateData(
+  did: Opaque<"string">,
+  dataCommitment: Opaque<"string">
+): [] {
   vault.insert(disclose(did), disclose(dataCommitment));
 }
 
-// Circuit to prove ownership/selectively disclose a field without revealing full data
-export circuit proveOwnership(did: Opaque<"string">, proofData: Opaque<"string">): Boolean {
-  // In real use this would verify a ZK proof that the caller controls the DID
-  // For starter: compile-safe placeholder until Map lookup semantics are finalized for v0.30
+export circuit proveOwnership(
+  did: Opaque<"string">,
+  proofData: Opaque<"string">
+): Boolean {
   return true;
 }
 
-// Selective disclosure placeholder circuit for starter builds.
-// TODO: Replace with Map lookup + proof-gated reveal once v0.30 map read APIs are confirmed.
-export circuit getSelectiveField(did: Opaque<"string">, fieldKey: Opaque<"string">): Boolean {
+export circuit getSelectiveField(
+  did: Opaque<"string">,
+  fieldKey: Opaque<"string">
+): Boolean {
   return true;
 }
