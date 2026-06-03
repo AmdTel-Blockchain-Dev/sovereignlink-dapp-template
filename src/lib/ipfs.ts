@@ -4,9 +4,15 @@ const DB_NAME = "sovereignlink-vault";
 const STORE = "profiles";
 const READ_GATEWAY = "https://ipfs.io/ipfs/";
 const DEFAULT_ADD = "https://ipfs.io/api/v0/add?pin=true";
-const CORS_RELAY = "https://cors.isomorphic-git.org";
 const TEMP_PREFIX = "temp-session-";
 const TEMP_KEY_PREFIX = "sovereignlink-temp-ipfs:";
+
+export type IPFSUploadResult = {
+  cid: string;
+  source: "ipfs" | "temporary";
+  durable: boolean;
+  status: "ok" | "degraded";
+};
 
 type ProfileRecord = { id: "me"; walletKeyB64: string };
 
@@ -52,6 +58,15 @@ async function saveTemporaryUpload(payload: string): Promise<string> {
   return cid;
 }
 
+function shouldUseSessionFallbackOnly(gateway: string): boolean {
+  if (typeof window === "undefined") return false;
+  const host = window.location.hostname.toLowerCase();
+  const isLocalHost = host === "localhost" || host === "127.0.0.1" || host.endsWith(".local");
+  const target = gateway.toLowerCase();
+  // Public ipfs.io add endpoint is typically blocked for browser POST from local/dev origins.
+  return isLocalHost && target.includes("ipfs.io");
+}
+
 export function clearTemporaryIPFSCache(): void {
   if (typeof window === "undefined") return;
   for (let i = sessionStorage.length - 1; i >= 0; i -= 1) {
@@ -72,20 +87,17 @@ export async function uploadToIPFS(data: unknown, gateway = "https://ipfs.io"): 
   const directEndpoint = gateway
     ? `${gateway.replace(/\/$/, "")}/api/v0/add?pin=true`
     : DEFAULT_ADD;
-  const relayEndpoint = `${CORS_RELAY}/${encodeURIComponent(directEndpoint)}`;
+  if (shouldUseSessionFallbackOnly(gateway)) {
+    return saveTemporaryUpload(encrypted);
+  }
   let response: Response;
   let uploadFailed = false;
   try {
-    response = await fetch(relayEndpoint, { method: "POST", body: form });
-    if (!response.ok) throw new Error(`Relay upload failed (${response.status})`);
+    response = await fetch(directEndpoint, { method: "POST", body: form });
+    if (!response.ok) throw new Error(`IPFS upload failed (${response.status})`);
   } catch {
-    try {
-      response = await fetch(directEndpoint, { method: "POST", body: form });
-      if (!response.ok) throw new Error(`IPFS upload failed (${response.status})`);
-    } catch {
-      uploadFailed = true;
-      response = new Response("{}", { status: 200 });
-    }
+    uploadFailed = true;
+    response = new Response("{}", { status: 200 });
   }
   if (uploadFailed) {
     // Temporary session-only fallback for CORS-restricted environments.
@@ -97,6 +109,41 @@ export async function uploadToIPFS(data: unknown, gateway = "https://ipfs.io"): 
   const cid = parsed.Hash ?? parsed.cid ?? parsed.Cid;
   if (!cid) throw new Error("Upload succeeded but no CID returned");
   return cid;
+}
+
+export async function uploadCiphertextToIPFS(
+  ciphertext: string,
+  gateway = "https://ipfs.io",
+): Promise<IPFSUploadResult> {
+  if (typeof window === "undefined") throw new Error("IPFS upload requires a browser environment");
+  const form = new FormData();
+  form.append("file", new Blob([ciphertext], { type: "text/plain" }), "sovereignlink-backup.enc");
+  const directEndpoint = gateway
+    ? `${gateway.replace(/\/$/, "")}/api/v0/add?pin=true`
+    : DEFAULT_ADD;
+  if (shouldUseSessionFallbackOnly(gateway)) {
+    const cid = await saveTemporaryUpload(ciphertext);
+    return { cid, source: "temporary", durable: false, status: "degraded" };
+  }
+  let response: Response;
+  let uploadFailed = false;
+  try {
+    response = await fetch(directEndpoint, { method: "POST", body: form });
+    if (!response.ok) throw new Error(`IPFS upload failed (${response.status})`);
+  } catch {
+    uploadFailed = true;
+    response = new Response("{}", { status: 200 });
+  }
+  if (uploadFailed) {
+    const cid = await saveTemporaryUpload(ciphertext);
+    return { cid, source: "temporary", durable: false, status: "degraded" };
+  }
+  const text = await response.text();
+  const first = text.trim().split("\n")[0] ?? "{}";
+  const parsed = JSON.parse(first) as { Hash?: string; cid?: string; Cid?: string };
+  const cid = parsed.Hash ?? parsed.cid ?? parsed.Cid;
+  if (!cid) throw new Error("Upload succeeded but no CID returned");
+  return { cid, source: "ipfs", durable: true, status: "ok" };
 }
 
 export function resolveCID(cid: string): string {
