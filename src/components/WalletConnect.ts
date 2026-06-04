@@ -18,6 +18,7 @@ type CardanoWindow = Window & {
 
 type SessionRecord = { id: "session"; ciphertext: string };
 type ProfileRecord = { id: "me"; walletKeyB64: string };
+const FORCE_LOGOUT_KEY = "sovereignlink-force-logout";
 
 /**
  * WalletConnect – Lit island for connecting a Cardano wallet (Mesh SDK).
@@ -154,6 +155,10 @@ export class WalletConnect extends LitElement {
     this._scanForWallets();
   };
 
+  private readonly _handleLogoutRequested = () => {
+    void this.logout();
+  };
+
   constructor() {
     super();
     this.status = "Disconnected";
@@ -203,8 +208,6 @@ export class WalletConnect extends LitElement {
       window.addEventListener("focus", this._scanForWallets);
       window.addEventListener("load", this._scanForWallets);
     }
-
-    void this.validateSession();
   }
 
   override firstUpdated() {
@@ -237,7 +240,7 @@ export class WalletConnect extends LitElement {
 
         this._scanForWallets();
       }, 1500);
-      window.addEventListener("logout-requested", () => void this.logout());
+      window.addEventListener("logout-requested", this._handleLogoutRequested);
     }
 
     void this.validateSession();
@@ -262,7 +265,7 @@ export class WalletConnect extends LitElement {
     if (typeof window !== "undefined") {
       window.removeEventListener("focus", this._scanForWallets);
       window.removeEventListener("load", this._scanForWallets);
-      window.removeEventListener("logout-requested", () => void this.logout());
+      window.removeEventListener("logout-requested", this._handleLogoutRequested);
       if (this._walletScanTimer !== undefined) {
         window.clearInterval(this._walletScanTimer);
         this._walletScanTimer = undefined;
@@ -384,6 +387,9 @@ export class WalletConnect extends LitElement {
       this.did = did;
       this.profile = profile;
       await this.createSessionToken(this.did);
+      if (typeof window !== "undefined") {
+        window.localStorage.removeItem(FORCE_LOGOUT_KEY);
+      }
       this.isLoggedIn = true;
       this.status = "Connected";
       console.log("[WalletConnect] ✓ Connected to wallet:", selected);
@@ -440,6 +446,13 @@ export class WalletConnect extends LitElement {
 
   async validateSession(): Promise<boolean> {
     if (typeof window === "undefined") return false;
+    if (window.localStorage.getItem(FORCE_LOGOUT_KEY) === "1") {
+      await this._clearSessionRecord();
+      this.sessionToken = null;
+      this.isLoggedIn = false;
+      this.status = this.detectedWallets.length > 0 ? "Ready to connect" : "No CIP-30 wallet detected";
+      return false;
+    }
     const db = await this._getDb();
     if (!db) return false;
     const session = await new Promise<SessionRecord | undefined>((resolve, reject) => {
@@ -466,6 +479,20 @@ export class WalletConnect extends LitElement {
       this.status = this.detectedWallets.length > 0 ? "Logged in" : "Reconnect to continue";
       const backup = await syncProfileBackups(profile);
       this.dispatchEvent(
+        new CustomEvent("wallet-connected", {
+          detail: { wallet: this.walletName || this.selectedWallet || "session" },
+          bubbles: true,
+          composed: true,
+        }),
+      );
+      this.dispatchEvent(
+        new CustomEvent("profile-ready", {
+          detail: { did: payload.did, profile },
+          bubbles: true,
+          composed: true,
+        }),
+      );
+      this.dispatchEvent(
         new CustomEvent("backup-status-updated", {
           detail: { backup: backup.status },
           bubbles: true,
@@ -477,6 +504,7 @@ export class WalletConnect extends LitElement {
       await this._clearSessionRecord();
       this.sessionToken = null;
       this.isLoggedIn = false;
+      this.status = this.detectedWallets.length > 0 ? "Ready to connect" : "No CIP-30 wallet detected";
       return false;
     }
   }
@@ -494,6 +522,7 @@ export class WalletConnect extends LitElement {
 
   async logout(): Promise<void> {
     if (typeof window === "undefined") return;
+    window.localStorage.setItem(FORCE_LOGOUT_KEY, "1");
     // Logout: clear session state only; encrypted sovereign profile remains local for next wallet login.
     await this._clearSessionRecord();
     this.did = "";
@@ -501,7 +530,7 @@ export class WalletConnect extends LitElement {
     this.sessionToken = null;
     this.isLoggedIn = false;
     this.walletName = "";
-    this.status = "Disconnected";
+    this.status = this.detectedWallets.length > 0 ? "Ready to connect" : "Disconnected";
     this.dispatchEvent(
       new CustomEvent("wallet-disconnected", {
         bubbles: true,

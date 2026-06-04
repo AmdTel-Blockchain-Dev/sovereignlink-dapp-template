@@ -315,9 +315,6 @@ void Layout;
     void Promise.all([loadProfile(), getBackupStatus()]).then(([profile, backup]) => {
       applyVaultStatus(profile);
       applyBackupStatus(backup);
-      if (walletStatus && profile?.did) {
-        walletStatus.textContent = `Wallet: session active (${profile.alias || "Sovereign User"})`;
-      }
     });
   </script>
 </Layout>
