@@ -2,10 +2,25 @@ import { encrypt } from "./storage.ts";
 
 const DB_NAME = "sovereignlink-vault";
 const STORE = "profiles";
-const READ_GATEWAY = "https://ipfs.io/ipfs/";
-const DEFAULT_ADD = "https://ipfs.io/api/v0/add?pin=true";
 const TEMP_PREFIX = "temp-session-";
 const TEMP_KEY_PREFIX = "sovereignlink-temp-ipfs:";
+
+// Configured via PUBLIC_IPFS_API (upload endpoint) and PUBLIC_IPFS_GATEWAY (read gateway).
+// In development, point these at a local Kubo node:
+//   PUBLIC_IPFS_API=http://127.0.0.1:5001
+//   PUBLIC_IPFS_GATEWAY=http://127.0.0.1:8080
+// In production, public IPFS gateways or authenticated Pinata/nft.storage are used.
+const CONFIGURED_API: string =
+  typeof import.meta !== "undefined" && import.meta.env?.PUBLIC_IPFS_API
+    ? (import.meta.env.PUBLIC_IPFS_API as string).replace(/\/$/, "")
+    : "https://ipfs.io";
+const CONFIGURED_GATEWAY: string =
+  typeof import.meta !== "undefined" && import.meta.env?.PUBLIC_IPFS_GATEWAY
+    ? (import.meta.env.PUBLIC_IPFS_GATEWAY as string).replace(/\/$/, "")
+    : "https://ipfs.io";
+
+const READ_GATEWAY = `${CONFIGURED_GATEWAY}/ipfs/`;
+const DEFAULT_ADD = `${CONFIGURED_API}/api/v0/add?pin=true`;
 
 export type IPFSUploadResult = {
   cid: string;
@@ -58,13 +73,24 @@ async function saveTemporaryUpload(payload: string): Promise<string> {
   return cid;
 }
 
-function shouldUseSessionFallbackOnly(gateway: string): boolean {
+function isLocalOrigin(): boolean {
   if (typeof window === "undefined") return false;
   const host = window.location.hostname.toLowerCase();
-  const isLocalHost = host === "localhost" || host === "127.0.0.1" || host.endsWith(".local");
-  const target = gateway.toLowerCase();
-  // Public ipfs.io add endpoint is typically blocked for browser POST from local/dev origins.
-  return isLocalHost && target.includes("ipfs.io");
+  return host === "localhost" || host === "127.0.0.1" || host.endsWith(".local");
+}
+
+function isRemotePublicGateway(apiEndpoint: string): boolean {
+  const target = apiEndpoint.toLowerCase();
+  // Treat ipfs.io and other public gateways (not localhost/127.0.0.1) as remote.
+  // A local Kubo node at localhost:5001 is a real reachable API, not a public blocked gateway.
+  return !target.includes("localhost") && !target.includes("127.0.0.1");
+}
+
+function shouldUseSessionFallbackOnly(apiEndpoint: string): boolean {
+  // Only bypass network and fall back to session storage when the browser is on a local origin
+  // AND the API target is a remote public gateway (which blocks browser POST due to CORS).
+  // When a local Kubo node is configured, skip the fallback and attempt the real API call.
+  return isLocalOrigin() && isRemotePublicGateway(apiEndpoint);
 }
 
 export function clearTemporaryIPFSCache(): void {
@@ -75,7 +101,7 @@ export function clearTemporaryIPFSCache(): void {
   }
 }
 
-export async function uploadToIPFS(data: unknown, gateway = "https://ipfs.io"): Promise<string> {
+export async function uploadToIPFS(data: unknown, gateway = CONFIGURED_API): Promise<string> {
   if (typeof window === "undefined") throw new Error("IPFS upload requires a browser environment");
   const walletKey = await getWalletKey();
   if (!walletKey) throw new Error("Wallet key unavailable for client-side encryption");
@@ -84,9 +110,7 @@ export async function uploadToIPFS(data: unknown, gateway = "https://ipfs.io"): 
   const form = new FormData();
   form.append("file", new Blob([encrypted], { type: "text/plain" }), "sovereignlink-profile.enc");
   // Replace with Pinata/nft.storage when user provides API key.
-  const directEndpoint = gateway
-    ? `${gateway.replace(/\/$/, "")}/api/v0/add?pin=true`
-    : DEFAULT_ADD;
+  const directEndpoint = `${gateway.replace(/\/$/, "")}/api/v0/add?pin=true`;
   if (shouldUseSessionFallbackOnly(gateway)) {
     return saveTemporaryUpload(encrypted);
   }
@@ -113,14 +137,12 @@ export async function uploadToIPFS(data: unknown, gateway = "https://ipfs.io"): 
 
 export async function uploadCiphertextToIPFS(
   ciphertext: string,
-  gateway = "https://ipfs.io",
+  gateway = CONFIGURED_API,
 ): Promise<IPFSUploadResult> {
   if (typeof window === "undefined") throw new Error("IPFS upload requires a browser environment");
   const form = new FormData();
   form.append("file", new Blob([ciphertext], { type: "text/plain" }), "sovereignlink-backup.enc");
-  const directEndpoint = gateway
-    ? `${gateway.replace(/\/$/, "")}/api/v0/add?pin=true`
-    : DEFAULT_ADD;
+  const directEndpoint = `${gateway.replace(/\/$/, "")}/api/v0/add?pin=true`;
   if (shouldUseSessionFallbackOnly(gateway)) {
     const cid = await saveTemporaryUpload(ciphertext);
     return { cid, source: "temporary", durable: false, status: "degraded" };
