@@ -1,7 +1,7 @@
 import { css, html, LitElement } from "lit";
 import { syncProfileBackups } from "../lib/backup.ts";
 import type { SovereignProfile } from "../lib/storage.ts";
-import { decrypt, encrypt, loadProfile, saveProfile } from "../lib/storage.ts";
+import { decrypt, encrypt, loadProfile, loadProfileByDid, saveProfile } from "../lib/storage.ts";
 
 type Cip30Provider = {
   enable: () => Promise<unknown>;
@@ -377,9 +377,8 @@ export class WalletConnect extends LitElement {
         createdAt: Date.now(),
       };
 
-      const existingProfile = await loadProfile();
-      const profileToPersist =
-        existingProfile && existingProfile.did === did ? existingProfile : defaultProfile;
+      const existingProfile = await loadProfileByDid(did);
+      const profileToPersist = existingProfile ?? defaultProfile;
 
       // Privacy + zero-cost Tier 0: encrypted local profile/session, no transaction or funds required.
       await saveProfile({ ...profileToPersist, walletPublicKey: hashBytes });
