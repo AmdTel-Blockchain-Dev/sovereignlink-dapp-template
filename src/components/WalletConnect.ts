@@ -1,6 +1,7 @@
 import { css, html, LitElement } from "lit";
+import { syncProfileBackups } from "../lib/backup.ts";
 import type { SovereignProfile } from "../lib/storage.ts";
-import { decrypt, encrypt, loadProfile, saveProfile } from "../lib/storage.ts";
+import { decrypt, encrypt, loadProfile, loadProfileByDid, saveProfile } from "../lib/storage.ts";
 
 type Cip30Provider = {
   enable: () => Promise<unknown>;
@@ -17,6 +18,7 @@ type CardanoWindow = Window & {
 
 type SessionRecord = { id: "session"; ciphertext: string };
 type ProfileRecord = { id: "me"; walletKeyB64: string };
+const FORCE_LOGOUT_KEY = "sovereignlink-force-logout";
 
 /**
  * WalletConnect – Lit island for connecting a Cardano wallet (Mesh SDK).
@@ -153,7 +155,7 @@ export class WalletConnect extends LitElement {
     this._scanForWallets();
   };
 
-  private readonly _handleLogoutClick = () => {
+  private readonly _handleLogoutRequested = () => {
     void this.logout();
   };
 
@@ -206,34 +208,22 @@ export class WalletConnect extends LitElement {
       window.addEventListener("focus", this._scanForWallets);
       window.addEventListener("load", this._scanForWallets);
     }
-
-    void this.validateSession();
   }
 
   override firstUpdated() {
     const button = this.shadowRoot?.getElementById("connect-wallet-button");
     const select = this.shadowRoot?.getElementById("wallet-select");
     const refreshButton = this.shadowRoot?.getElementById("refresh-wallets-button");
-    const logoutButton = this.shadowRoot?.getElementById("logout-button");
-
     if (button instanceof HTMLButtonElement) {
       button.addEventListener("click", this._handleConnectClick);
-      console.log("[WalletConnect] Attached direct click listener to button");
     }
 
     if (select instanceof HTMLSelectElement) {
       select.addEventListener("change", this._handleWalletChange);
-      console.log("[WalletConnect] Attached change listener to wallet selector");
     }
 
     if (refreshButton instanceof HTMLButtonElement) {
       refreshButton.addEventListener("click", this._handleRefreshClick);
-      console.log("[WalletConnect] Attached click listener to refresh button");
-    }
-
-    if (logoutButton instanceof HTMLButtonElement) {
-      logoutButton.addEventListener("click", this._handleLogoutClick);
-      console.log("[WalletConnect] Attached click listener to logout button");
     }
 
     if (typeof window !== "undefined") {
@@ -250,6 +240,7 @@ export class WalletConnect extends LitElement {
 
         this._scanForWallets();
       }, 1500);
+      window.addEventListener("logout-requested", this._handleLogoutRequested);
     }
 
     void this.validateSession();
@@ -259,8 +250,6 @@ export class WalletConnect extends LitElement {
     const button = this.shadowRoot?.getElementById("connect-wallet-button");
     const select = this.shadowRoot?.getElementById("wallet-select");
     const refreshButton = this.shadowRoot?.getElementById("refresh-wallets-button");
-    const logoutButton = this.shadowRoot?.getElementById("logout-button");
-
     if (button instanceof HTMLButtonElement) {
       button.removeEventListener("click", this._handleConnectClick);
     }
@@ -273,13 +262,10 @@ export class WalletConnect extends LitElement {
       refreshButton.removeEventListener("click", this._handleRefreshClick);
     }
 
-    if (logoutButton instanceof HTMLButtonElement) {
-      logoutButton.removeEventListener("click", this._handleLogoutClick);
-    }
-
     if (typeof window !== "undefined") {
       window.removeEventListener("focus", this._scanForWallets);
       window.removeEventListener("load", this._scanForWallets);
+      window.removeEventListener("logout-requested", this._handleLogoutRequested);
       if (this._walletScanTimer !== undefined) {
         window.clearInterval(this._walletScanTimer);
         this._walletScanTimer = undefined;
@@ -391,9 +377,8 @@ export class WalletConnect extends LitElement {
         createdAt: Date.now(),
       };
 
-      const existingProfile = await loadProfile();
-      const profileToPersist =
-        existingProfile && existingProfile.did === did ? existingProfile : defaultProfile;
+      const existingProfile = await loadProfileByDid(did);
+      const profileToPersist = existingProfile ?? defaultProfile;
 
       // Privacy + zero-cost Tier 0: encrypted local profile/session, no transaction or funds required.
       await saveProfile({ ...profileToPersist, walletPublicKey: hashBytes });
@@ -401,6 +386,9 @@ export class WalletConnect extends LitElement {
       this.did = did;
       this.profile = profile;
       await this.createSessionToken(this.did);
+      if (typeof window !== "undefined") {
+        window.localStorage.removeItem(FORCE_LOGOUT_KEY);
+      }
       this.isLoggedIn = true;
       this.status = "Connected";
       console.log("[WalletConnect] ✓ Connected to wallet:", selected);
@@ -418,6 +406,16 @@ export class WalletConnect extends LitElement {
           composed: true,
         }),
       );
+      if (profile) {
+        const backup = await syncProfileBackups(profile);
+        this.dispatchEvent(
+          new CustomEvent("backup-status-updated", {
+            detail: { backup: backup.status },
+            bubbles: true,
+            composed: true,
+          }),
+        );
+      }
     } catch (error) {
       console.error("[WalletConnect] Connection rejected:", error);
       this.status = "Connection rejected";
@@ -447,6 +445,13 @@ export class WalletConnect extends LitElement {
 
   async validateSession(): Promise<boolean> {
     if (typeof window === "undefined") return false;
+    if (window.localStorage.getItem(FORCE_LOGOUT_KEY) === "1") {
+      await this._clearSessionRecord();
+      this.sessionToken = null;
+      this.isLoggedIn = false;
+      this.status = this.detectedWallets.length > 0 ? "Ready to connect" : "No CIP-30 wallet detected";
+      return false;
+    }
     const db = await this._getDb();
     if (!db) return false;
     const session = await new Promise<SessionRecord | undefined>((resolve, reject) => {
@@ -471,11 +476,34 @@ export class WalletConnect extends LitElement {
       this.profile = profile;
       this.isLoggedIn = true;
       this.status = this.detectedWallets.length > 0 ? "Logged in" : "Reconnect to continue";
+      const backup = await syncProfileBackups(profile);
+      this.dispatchEvent(
+        new CustomEvent("wallet-connected", {
+          detail: { wallet: this.walletName || this.selectedWallet || "session" },
+          bubbles: true,
+          composed: true,
+        }),
+      );
+      this.dispatchEvent(
+        new CustomEvent("profile-ready", {
+          detail: { did: payload.did, profile },
+          bubbles: true,
+          composed: true,
+        }),
+      );
+      this.dispatchEvent(
+        new CustomEvent("backup-status-updated", {
+          detail: { backup: backup.status },
+          bubbles: true,
+          composed: true,
+        }),
+      );
       return true;
     } catch {
       await this._clearSessionRecord();
       this.sessionToken = null;
       this.isLoggedIn = false;
+      this.status = this.detectedWallets.length > 0 ? "Ready to connect" : "No CIP-30 wallet detected";
       return false;
     }
   }
@@ -493,6 +521,7 @@ export class WalletConnect extends LitElement {
 
   async logout(): Promise<void> {
     if (typeof window === "undefined") return;
+    window.localStorage.setItem(FORCE_LOGOUT_KEY, "1");
     // Logout: clear session state only; encrypted sovereign profile remains local for next wallet login.
     await this._clearSessionRecord();
     this.did = "";
@@ -500,7 +529,7 @@ export class WalletConnect extends LitElement {
     this.sessionToken = null;
     this.isLoggedIn = false;
     this.walletName = "";
-    this.status = "Disconnected";
+    this.status = this.detectedWallets.length > 0 ? "Ready to connect" : "Disconnected";
     this.dispatchEvent(
       new CustomEvent("wallet-disconnected", {
         bubbles: true,
@@ -551,15 +580,6 @@ export class WalletConnect extends LitElement {
 
             <button id="refresh-wallets-button" type="button" ?disabled=${this.isConnecting}>
               Refresh
-            </button>
-
-            <button
-              id="logout-button"
-              type="button"
-              ?hidden=${!this.isLoggedIn}
-              ?disabled=${!this.isLoggedIn}
-            >
-              Logout
             </button>
           </div>
         </div>

@@ -42,7 +42,9 @@ SovereignLink/
 │ ├── lib/
 │ │ ├── mesh.ts # Mesh SDK + wallet helpers
 │ │ ├── did.ts # DID + VC helpers
-│ │ └── storage.ts # Encrypted local profile/session storage (Phase 1)
+│ │ ├── storage.ts # Encrypted local profile/session/backup storage
+│ │ ├── ipfs.ts # IPFS encrypted upload with localhost-safe fallback
+│ │ └── backup.ts # Multi-store backup orchestration (IPFS primary + local fallback)
 │ └── styles/
 │ └── global.css # Open Props + project tokens
 ├── astro.config.mjs
@@ -113,15 +115,21 @@ This workflow keeps feedback loops extremely fast, costs near-zero, and maintain
 
 - ✅ Dashboard UI polish in `index.astro` with ordered card flow:
   1. Header (title + theme toggle + wallet status)
-  2. Sovereign Profile
-  3. Private Vault Status
+  2. Sovereign Profile (with Logout button)
+  3. Private Vault Status (with backup source-of-truth indicators)
   4. Quick Share / Selective Disclosure stub
   5. Shared Feed stub (Phase 2.5 placeholder)
 - ✅ Open Props-only light/dark theme tokens in `global.css` + no-flash local theme bootstrap in `Layout.astro`
-- ✅ Client-side dashboard state sync via `wallet-connected`, `wallet-disconnected`, `profile-ready`, and `sovereign-profile-updated`
+- ✅ Client-side dashboard state sync via `wallet-connected`, `wallet-disconnected`, `profile-ready`, `sovereign-profile-updated`, and `backup-status-updated`
 - ✅ `SovereignProfile.ts` now persists and emits vault upgrade metadata (`vaultTier`, `lastCommitment`, `lastUpgradeTx`, `lastUpgradeStatus`)
 - ✅ Shielded UX state: hide upgrade CTA after success and show `Shielded on Midnight ✓` badge
-- ✅ Wallet controls de-duplicated in `WalletConnect.ts` for cleaner logged-in state
+- ✅ **Conditional dashboard UI**: only Wallet Status card shown when logged out; profile/vault/feed cards revealed on connect; WalletConnect hides on login
+- ✅ **Logout button in SovereignProfile**: dispatches `logout-requested` event; WalletConnect handles session clear and dispatches `wallet-disconnected`
+- ✅ **Multi-store encrypted backup** (`src/lib/backup.ts`): IPFS preferred, local IndexedDB fallback, ciphertext-hash divergence detection, snapshot index (max 12 entries)
+- ✅ **Backup sync triggers**: on every profile save, on wallet connect, and on session restore
+- ✅ **Manual Sync Now + Restore from Backup** actions in SovereignProfile with source selection when diverged
+- ✅ **Backup status indicators** in vault card: Backup Source of Truth, Divergence, Last Backup Sync
+- ✅ **IPFS CORS guard**: localhost/127.0.0.1 with `ipfs.io` gateway skips network upload immediately and uses encrypted session fallback
 
 Remaining Phase 2 feature work:
 
@@ -129,14 +137,18 @@ Remaining Phase 2 feature work:
 - ZK selective-disclosure proof generation & sharing (Midnight Compact circuits)
 - Minimal sharing feed via `sharing-feed.compact` (bulletin-board style, verifiable attestations)
 - `ShareModal` Lit component for per-field selective disclosure
+- Durable IPFS: replace session fallback with same-origin Netlify function proxy or authenticated Pinata/nft.storage
 - Optional: Cardano anchoring for public attestations cross-chain
 
-## Current Phase 2 UI Status (April 2026)
+## Current Phase 2 UI Status (June 2026)
 
 - `global.css` uses Open Props primitives + project aliases (`--color-*`, `--sl-*`) with `[data-theme="dark"]` overrides only.
 - Theme preference is local-only (`localStorage` key: `sovereignlink-theme`) and initialized in `Layout.astro` before paint.
-- `index.astro` includes responsive card/grid layout with Open Props spacing, radius, surface, and border tokens.
-- Vault status card reads from encrypted local profile data and reflects live upgrades without backend polling.
+- `index.astro` shows only the Wallet Status card (with WalletConnect component) when logged out. All other cards are inside `<div id="logged-in-cards">` with `display: none` initially, revealed to `display: contents` on `wallet-connected` and hidden again on `wallet-disconnected`.
+- WalletConnect component is wrapped in `<div id="wallet-connect-card">` and hidden on connect, shown again on disconnect.
+- Logout button lives in SovereignProfile's actions row; clicking it dispatches `logout-requested` (bubbles), WalletConnect handles session clear and dispatches `wallet-disconnected`.
+- Vault status card reads from encrypted local profile data and reflects live upgrades and backup sync state without backend polling.
+- Backup status indicators in vault card: **Backup Source of Truth** (IPFS primary / Local fallback / Session fallback), **Backup Divergence** (Aligned / Needs manual restore choice), **Last Backup Sync** (locale time string).
 - All dashboard UX state remains client-side; no tracking, no server persistence, and no identity linkage for theme or layout state.
 
 ## Phase 3 – Polish & Production
@@ -203,10 +215,11 @@ Remaining Phase 2 feature work:
 
 ### IPFS upload in browser-constrained environments
 
-- Public gateways like `ipfs.io` often reject browser POST `/api/v0/add` requests due to ACAO/CORS limits; this is expected in many preview origins.
-- Keep upload flow lightweight and browser-first: try relay/direct upload first, then fall back to temporary session-only encrypted storage if blocked.
-- Temporary fallback CIDs must be clearly labeled as local-only and ephemeral (cleared on logout/session end), not durable public IPFS content.
-- For durable uploads, migrate to user-provided authenticated pinning (`Pinata` / `nft.storage`) or same-origin function proxy.
+- `ipfs.io/api/v0/add` rejects browser POST from localhost and most preview origins due to CORS. Do NOT try relay services like `cors.isomorphic-git.org` — also blocked.
+- Guard uploads with `shouldUseSessionFallbackOnly(gateway)`: if `window.location.hostname` is localhost/127.0.0.1 and gateway contains `ipfs.io`, skip network entirely and use encrypted session fallback.
+- Temporary fallback CIDs use prefix `temp-session-` and are stored in `sessionStorage` with key prefix `sovereignlink-temp-ipfs:`. They are cleared on logout via `clearTemporaryIPFSCache()`.
+- `isTemporaryCID(cid)` and `resolveCID(cid)` handle both real and session fallback CIDs consistently.
+- For durable uploads, migrate to a same-origin Netlify function proxy or authenticated Pinata/nft.storage API key held by the user.
 
 ### Decorator compatibility in this repo
 
@@ -219,12 +232,29 @@ Remaining Phase 2 feature work:
 - Use `firstUpdated()` with `getElementById` + `addEventListener` as a reliable fallback. Store named handlers as class arrow functions to allow proper `removeEventListener` cleanup in `disconnectedCallback`.
 - If listeners are attached in `firstUpdated()`, avoid conditionally creating/removing those target elements later in render. Prefer keeping controls in the DOM and toggling `hidden`/`disabled` for reliable wiring.
 
-### Theme + dashboard UI pattern (Phase 2)
+### Multi-store backup pattern (Phase 2 baseline)
 
-- Keep theme bootstrapping in `Layout.astro` `<head>` to avoid light/dark flash on first paint.
-- Keep interactive dashboard logic in `index.astro` script with raw-tag imports for Lit components.
-- Use event-driven updates for wallet/profile/vault state instead of central stores or backend APIs.
-- Preserve sovereignty comments near theme and status persistence logic: local-only state, no analytics, no server sync.
+- `src/lib/backup.ts` is the single entry point for backup orchestration. Never call `uploadCiphertextToIPFS` or `saveLocalBackupSnapshot` directly from components.
+- Sync flow: `syncProfileBackups(profile)` → creates encrypted snapshot (ipfsCid stripped) → writes local backup record → uploads to IPFS (or session fallback if localhost) → updates `BackupIndexRecord` (max 12 snapshots, sorted newest-first).
+- Divergence is detected by comparing `ciphertextHash` of latest local and IPFS snapshots. If hashes differ, `BackupStatus.diverged = true`.
+- Restore flow: `getRestoreCandidates()` loads local snapshot + fetches IPFS snapshot payload; component prompts user choice when diverged.
+- All backup records stored in same IndexedDB `sovereignlink-vault/profiles` store under keys `backup-local` and `backup-index`.
+- Preferred source auto-upgrades to `"ipfs"` when a durable IPFS snapshot exists; falls back to `"local"` otherwise.
+- Emit `backup-status-updated` event (bubbles, composed) from components after every sync so dashboard can reflect current state without polling.
+
+### Logout event flow (current baseline)
+
+- Logout button in `SovereignProfile` dispatches `logout-requested` (bubbles: true, composed: true) — it does NOT directly clear session or dispatch `wallet-disconnected`.
+- `WalletConnect` listens on `window` for `logout-requested`, calls its own `logout()` method which clears IndexedDB session record, resets component state, and dispatches `wallet-disconnected`.
+- `SovereignProfile` hears `wallet-disconnected` via its existing `_onWalletDisconnected` handler and clears profile state.
+- This one-way flow prevents double-firing of `wallet-disconnected`.
+- `SovereignProfile` does NOT have its own `logout()` method — state clearing is fully handled by `_onWalletDisconnected`.
+
+### Conditional dashboard visibility pattern
+
+- Wrap all logged-in cards in `<div id="logged-in-cards" style="display: none;">` — use `display: contents` when revealed so children participate normally in the CSS grid.
+- Wrap `<wallet-connect>` in `<div id="wallet-connect-card">` — hide it on `wallet-connected`, show on `wallet-disconnected`.
+- Never conditionally render the Lit component tags themselves; only toggle the wrapper container visibility. This keeps Lit lifecycle hooks stable.
 
 ### Phase 2 zero-cost testing setup
 

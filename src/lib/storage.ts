@@ -8,10 +8,37 @@ export type SovereignProfile = {
   lastCommitment?: string;
   lastUpgradeTx?: string;
   lastUpgradeStatus?: string;
+  profileVersion?: number;
+  updatedAt?: number;
   createdAt: number;
 };
 
-type VaultRecord = { id: "me"; ciphertext: string; walletKeyB64: string };
+type VaultRecord = { id: string; ciphertext: string; walletKeyB64: string };
+export type BackupStore = "ipfs" | "local" | "temporary";
+
+export type BackupSnapshotMetadata = {
+  source: BackupStore;
+  cid?: string;
+  ciphertextHash: string;
+  profileVersion: number;
+  updatedAt: number;
+  durable: boolean;
+  status: "ok" | "degraded";
+};
+
+type BackupIndexRecord = {
+  id: string;
+  preferredSource: BackupStore;
+  lastSyncedAt: number;
+  snapshots: BackupSnapshotMetadata[];
+};
+
+type LocalBackupRecord = {
+  id: string;
+  ciphertext: string;
+  walletKeyB64: string;
+  metadata: BackupSnapshotMetadata;
+};
 
 const DB_NAME = "sovereignlink-vault";
 const STORE = "profiles";
@@ -22,6 +49,10 @@ function toBase64(bytes: Uint8Array): string {
 
 function fromBase64(value: string): Uint8Array {
   return Uint8Array.from(atob(value), (c) => c.charCodeAt(0));
+}
+
+function toHex(bytes: Uint8Array): string {
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
 }
 
 function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
@@ -51,6 +82,12 @@ async function deriveAesKey(walletPublicKey: Uint8Array): Promise<CryptoKey> {
     false,
     ["encrypt", "decrypt"],
   );
+}
+
+async function hashString(value: string): Promise<string> {
+  const bytes = new TextEncoder().encode(value);
+  const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", bytes));
+  return toHex(digest);
 }
 
 export async function encrypt(data: unknown, key: Uint8Array): Promise<string> {
@@ -92,17 +129,36 @@ export async function saveProfile(
   const db = await getDb();
   if (!db) return null;
   const { walletPublicKey, ...profile } = data;
-  const record: VaultRecord = {
-    id: "me",
+  const base = {
     ciphertext: await encrypt(profile, walletPublicKey),
     walletKeyB64: toBase64(walletPublicKey),
   };
   await new Promise<void>((resolve, reject) => {
     const tx = db.transaction(STORE, "readwrite");
-    tx.objectStore(STORE).put(record);
+    // "me" is the active-wallet pointer; profile:<did> keeps each wallet's data separate.
+    tx.objectStore(STORE).put({ id: "me", ...base } satisfies VaultRecord);
+    tx.objectStore(STORE).put({ id: `profile:${profile.did}`, ...base } satisfies VaultRecord);
     tx.oncomplete = () => resolve();
     tx.onerror = () => reject(tx.error ?? new Error("IndexedDB write failed"));
   });
+}
+
+export async function loadProfileByDid(did: string): Promise<SovereignProfile | null> {
+  const db = await getDb();
+  if (!db) return null;
+  const read = (id: string) =>
+    new Promise<VaultRecord | undefined>((resolve, reject) => {
+      const req = db.transaction(STORE, "readonly").objectStore(STORE).get(id);
+      req.onsuccess = () => resolve(req.result as VaultRecord | undefined);
+      req.onerror = () => reject(req.error ?? new Error("IndexedDB read failed"));
+    });
+  const record = await read(`profile:${did}`);
+  if (record) {
+    return (await decrypt(record.ciphertext, fromBase64(record.walletKeyB64))) as SovereignProfile;
+  }
+  // Legacy single-record vault written before per-DID storage.
+  const legacy = await loadProfile();
+  return legacy?.did === did ? legacy : null;
 }
 
 export async function loadProfile(): Promise<SovereignProfile | null> {
@@ -116,6 +172,112 @@ export async function loadProfile(): Promise<SovereignProfile | null> {
   });
   if (!record) return null;
   return (await decrypt(record.ciphertext, fromBase64(record.walletKeyB64))) as SovereignProfile;
+}
+
+export async function getStoredWalletKey(): Promise<Uint8Array | null> {
+  const db = await getDb();
+  if (!db) return null;
+  const record = await new Promise<VaultRecord | undefined>((resolve, reject) => {
+    const req = db.transaction(STORE, "readonly").objectStore(STORE).get("me");
+    req.onsuccess = () => resolve(req.result as VaultRecord | undefined);
+    req.onerror = () => reject(req.error ?? new Error("IndexedDB read failed"));
+  });
+  return record?.walletKeyB64 ? fromBase64(record.walletKeyB64) : null;
+}
+
+export async function createEncryptedProfileSnapshot(
+  profile: SovereignProfile,
+  walletPublicKey: Uint8Array,
+): Promise<{ ciphertext: string; ciphertextHash: string }> {
+  const snapshotProfile: SovereignProfile = {
+    ...profile,
+    ipfsCid: undefined,
+  };
+  const ciphertext = await encrypt(snapshotProfile, walletPublicKey);
+  return { ciphertext, ciphertextHash: await hashString(ciphertext) };
+}
+
+// Backups are scoped to the active wallet's DID so wallets never overwrite each other.
+async function backupRecordId(prefix: "backup-local" | "backup-index"): Promise<string | null> {
+  const active = await loadProfile();
+  return active ? `${prefix}:${active.did}` : null;
+}
+
+export async function saveLocalBackupSnapshot(input: {
+  ciphertext: string;
+  walletPublicKey: Uint8Array;
+  metadata: BackupSnapshotMetadata;
+}): Promise<undefined | null> {
+  const db = await getDb();
+  const id = await backupRecordId("backup-local");
+  if (!db || !id) return null;
+  const record: LocalBackupRecord = {
+    id,
+    ciphertext: input.ciphertext,
+    walletKeyB64: toBase64(input.walletPublicKey),
+    metadata: input.metadata,
+  };
+  await new Promise<void>((resolve, reject) => {
+    const tx = db.transaction(STORE, "readwrite");
+    tx.objectStore(STORE).put(record);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error ?? new Error("IndexedDB write failed"));
+  });
+}
+
+export async function loadLocalBackupSnapshot(): Promise<
+  | {
+      profile: SovereignProfile;
+      metadata: BackupSnapshotMetadata;
+    }
+  | null
+> {
+  const db = await getDb();
+  const id = await backupRecordId("backup-local");
+  if (!db || !id) return null;
+  const record = await new Promise<LocalBackupRecord | undefined>((resolve, reject) => {
+    const req = db.transaction(STORE, "readonly").objectStore(STORE).get(id);
+    req.onsuccess = () => resolve(req.result as LocalBackupRecord | undefined);
+    req.onerror = () => reject(req.error ?? new Error("IndexedDB read failed"));
+  });
+  if (!record) return null;
+  const walletKey = fromBase64(record.walletKeyB64);
+  const profile = (await decrypt(record.ciphertext, walletKey)) as SovereignProfile;
+  return { profile, metadata: record.metadata };
+}
+
+export async function loadBackupIndex(): Promise<BackupIndexRecord | null> {
+  const db = await getDb();
+  const id = await backupRecordId("backup-index");
+  if (!db || !id) return null;
+  const record = await new Promise<BackupIndexRecord | undefined>((resolve, reject) => {
+    const req = db.transaction(STORE, "readonly").objectStore(STORE).get(id);
+    req.onsuccess = () => resolve(req.result as BackupIndexRecord | undefined);
+    req.onerror = () => reject(req.error ?? new Error("IndexedDB read failed"));
+  });
+  return record ?? null;
+}
+
+export async function saveBackupIndex(input: {
+  preferredSource: BackupStore;
+  snapshots: BackupSnapshotMetadata[];
+  lastSyncedAt: number;
+}): Promise<undefined | null> {
+  const db = await getDb();
+  const id = await backupRecordId("backup-index");
+  if (!db || !id) return null;
+  const record: BackupIndexRecord = {
+    id,
+    preferredSource: input.preferredSource,
+    snapshots: input.snapshots,
+    lastSyncedAt: input.lastSyncedAt,
+  };
+  await new Promise<void>((resolve, reject) => {
+    const tx = db.transaction(STORE, "readwrite");
+    tx.objectStore(STORE).put(record);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error ?? new Error("IndexedDB write failed"));
+  });
 }
 
 export async function clearProfile(): Promise<undefined | null> {

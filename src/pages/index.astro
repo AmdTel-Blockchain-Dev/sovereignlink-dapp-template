@@ -25,15 +25,18 @@ void Layout;
         </button>
         <p id="wallet-status">Wallet: disconnected</p>
       </div>
-      <wallet-connect></wallet-connect>
+      <div id="wallet-connect-card">
+        <wallet-connect></wallet-connect>
+      </div>
     </section>
 
-    <section class="dashboard-card">
-      <sovereign-profile></sovereign-profile>
-    </section>
+    <div id="logged-in-cards" style="display: none;">
+      <section class="dashboard-card">
+        <sovereign-profile></sovereign-profile>
+      </section>
 
-    <section class="dashboard-card vault-card">
-      <h2>Private Vault Status</h2>
+      <section class="dashboard-card vault-card">
+        <h2>Private Vault Status</h2>
       <p class="card-note">
         All UI state is client-side; theme and vault status persist locally
         encrypted where possible.
@@ -50,6 +53,18 @@ void Layout;
         <div>
           <p class="k">Upgrade Status</p>
           <p class="v" id="vault-upgrade-status">Awaiting upgrade</p>
+        </div>
+        <div>
+          <p class="k">Backup Source of Truth</p>
+          <p class="v" id="backup-source">Local fallback</p>
+        </div>
+        <div>
+          <p class="k">Backup Divergence</p>
+          <p class="v" id="backup-divergence">Unknown</p>
+        </div>
+        <div>
+          <p class="k">Last Backup Sync</p>
+          <p class="v" id="backup-last-sync">never</p>
         </div>
       </div>
     </section>
@@ -71,6 +86,7 @@ void Layout;
       </p>
       <div class="feed-empty">No attestations posted yet.</div>
     </section>
+    </div>
   </main>
 
   <style>
@@ -185,6 +201,7 @@ void Layout;
   <script>
     import "../components/SovereignProfile.ts";
     import "../components/WalletConnect.ts";
+    import { getBackupStatus } from "../lib/backup.ts";
     import { loadProfile } from "../lib/storage.ts";
 
     type DashboardProfile = {
@@ -201,6 +218,11 @@ void Layout;
     const tierEl = document.getElementById("vault-tier");
     const commitmentEl = document.getElementById("vault-commitment");
     const upgradeStatusEl = document.getElementById("vault-upgrade-status");
+    const backupSourceEl = document.getElementById("backup-source");
+    const backupDivergenceEl = document.getElementById("backup-divergence");
+    const backupLastSyncEl = document.getElementById("backup-last-sync");
+    const walletConnectCard = document.getElementById("wallet-connect-card");
+    const loggedInCards = document.getElementById("logged-in-cards");
 
     const setThemeLabel = () => {
       if (!(toggle instanceof HTMLButtonElement)) return;
@@ -220,6 +242,25 @@ void Layout;
         (isShielded ? "Shielded on Midnight" : "Awaiting upgrade");
     };
 
+    const applyBackupStatus = (detail: {
+      preferredSource?: "ipfs" | "local" | "temporary";
+      diverged?: boolean;
+      lastSyncedAt?: number;
+    }) => {
+      if (!backupSourceEl || !backupDivergenceEl || !backupLastSyncEl) return;
+      const preferred = detail.preferredSource || "local";
+      backupSourceEl.textContent =
+        preferred === "ipfs"
+          ? "IPFS primary"
+          : preferred === "temporary"
+            ? "Session fallback"
+            : "Local fallback";
+      backupDivergenceEl.textContent = detail.diverged ? "Needs manual restore choice" : "Aligned";
+      backupLastSyncEl.textContent = detail.lastSyncedAt
+        ? new Date(detail.lastSyncedAt).toLocaleTimeString()
+        : "never";
+    };
+
     // Sovereign/privacy: dashboard state stays in-browser with no tracking or backend sync.
     if (toggle instanceof HTMLButtonElement) {
       toggle.addEventListener("click", () => {
@@ -235,11 +276,15 @@ void Layout;
       if (!walletStatus) return;
       const detail = (event as CustomEvent<{ wallet?: string }>).detail || {};
       walletStatus.textContent = `Wallet: connected (${detail.wallet || "provider"})`;
+      if (walletConnectCard) walletConnectCard.style.display = "none";
+      if (loggedInCards) loggedInCards.style.display = "contents";
     });
 
     window.addEventListener("wallet-disconnected", () => {
       if (walletStatus) walletStatus.textContent = "Wallet: disconnected";
       applyVaultStatus(null);
+      if (walletConnectCard) walletConnectCard.style.display = "block";
+      if (loggedInCards) loggedInCards.style.display = "none";
     });
 
     window.addEventListener("profile-ready", (event: Event) => {
@@ -254,12 +299,22 @@ void Layout;
       applyVaultStatus(detail.profile || null);
     });
 
+    window.addEventListener("backup-status-updated", (event: Event) => {
+      const detail =
+        (event as CustomEvent<{
+          backup?: {
+            preferredSource?: "ipfs" | "local" | "temporary";
+            diverged?: boolean;
+            lastSyncedAt?: number;
+          };
+        }>).detail || {};
+      applyBackupStatus(detail.backup || {});
+    });
+
     setThemeLabel();
-    void loadProfile().then((profile) => {
+    void Promise.all([loadProfile(), getBackupStatus()]).then(([profile, backup]) => {
       applyVaultStatus(profile);
-      if (walletStatus && profile?.did) {
-        walletStatus.textContent = `Wallet: session active (${profile.alias || "Sovereign User"})`;
-      }
+      applyBackupStatus(backup);
     });
   </script>
 </Layout>
